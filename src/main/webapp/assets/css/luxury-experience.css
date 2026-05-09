@@ -66,7 +66,7 @@ body {
 h1, h2, .display-1, .display-2, .display-3, .editorial-headline {
     font-family: var(--font-display);
     font-weight: 500;
-    letter-spacing: -0.02em;family-
+    letter-spacing: -0.02em;
     line-height: 1.05;
 }
 
@@ -99,7 +99,7 @@ h3, h4, h5, h6 {
 .lux-display {
     font-family: var(--font-display);
     font-size: clamp(2.75rem, 6.5vw, 6rem);
-    font-weight: 500;family-
+    font-weight: 500;
     line-height: 0.98;
     letter-spacing: -0.03em;
 }
@@ -393,7 +393,7 @@ h3, h4, h5, h6 {
 .trust-grid + h2 {
     font-family: var(--font-display);
     font-size: clamp(2.25rem, 4.5vw, 4.5rem);
-    font-weight: 500;family-
+    font-weight: 500;
     line-height: 1;
     letter-spacing: -0.025em;
     margin: 0 0 32px;
@@ -874,7 +874,7 @@ h3, h4, h5, h6 {
 .campaign-card strong {
     font-family: var(--font-display);
     color: var(--lux-ivory);
-    font-size: clamp(1.5rem,family- 2.4vw, 2.5rem);
+    font-size: clamp(1.5rem, 2.4vw, 2.5rem);
     font-weight: 500;
     line-height: 1.05;
     letter-spacing: -0.015em;
@@ -910,7 +910,7 @@ h3, h4, h5, h6 {
 .value-item .display-3 {
     font-family: var(--font-display);
     font-size: 1.5rem;
-    font-weight: 500;family-
+    font-weight: 500;
     color: var(--lux-charcoal);
     margin-bottom: 12px;
     letter-spacing: -0.015em;
@@ -932,7 +932,7 @@ h3, h4, h5, h6 {
 .trust-card .display-3 {
     font-family: var(--font-display);
     font-size: 1.5rem;
-    font-weight: 500;-family
+    font-weight: 500;
     color: var(--color-text-primary);
     margin-bottom: 12px;
 }
@@ -976,7 +976,7 @@ h3, h4, h5, h6 {
 .newsletter-section h2 {
     font-family: var(--font-display);
     font-size: clamp(2.25rem, 5vw, 4.5rem);
-    font-weight: 500;family-
+    font-weight: 500;
     line-height: 1;
     color: var(--lux-ivory);
     margin: 16px 0 0;

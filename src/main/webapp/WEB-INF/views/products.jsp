@@ -116,6 +116,8 @@
     </div>
 </section>
 
+<div class="divider-luxury"></div>
+
 <!-- Mobile filter overlay -->
 <div class="filter-overlay" id="filter-overlay" onclick="closeFilterSidebar()"></div>
 
@@ -155,10 +157,10 @@
                 <!-- Price Range -->
                 <div class="filter-group">
                     <h3 class="filter-title">Price Range</h3>
-                    <div class="price-inputs" style="display: flex; gap: var(--space-2); align-items: center; margin-bottom: var(--space-3);">
-                        <input type="number" name="minPrice" placeholder="Min" class="form-input" style="padding: var(--space-2);" value="<%= minPriceVal %>">
+                    <div class="price-inputs">
+                        <input type="number" name="minPrice" placeholder="Min" class="form-input" value="<%= minPriceVal %>">
                         <span>-</span>
-                        <input type="number" name="maxPrice" placeholder="Max" class="form-input" style="padding: var(--space-2);" value="<%= maxPriceVal %>">
+                        <input type="number" name="maxPrice" placeholder="Max" class="form-input" value="<%= maxPriceVal %>">
                     </div>
                 </div>
 
@@ -176,7 +178,7 @@
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-block">Apply Filters</button>
-                <a href="<%= request.getContextPath() %>/products" class="btn btn-secondary btn-block" style="margin-top: var(--space-2);">Clear All</a>
+                <a href="<%= request.getContextPath() %>/products" class="btn btn-secondary btn-block filter-clear-btn">Clear All</a>
             </form>
         </aside>
 

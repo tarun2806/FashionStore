@@ -56,6 +56,14 @@
     transition: all var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Premium remove animation (paired with cart.js) */
+.cart-card.is-removing {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(1px);
+    transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out), filter 260ms var(--ease-out);
+}
+
 @media (min-width: 768px) {
     .cart-card {
         display: flex;
@@ -669,6 +677,35 @@
 
 .discount-row {
     color: #10B981;
+}
+
+/* Dark mode pass for cart surface + sticky summary (luxury depth) */
+[data-theme="dark"] .cart-page {
+    background: var(--color-bg-primary);
+}
+
+[data-theme="dark"] .cart-card,
+[data-theme="dark"] .order-summary-card,
+[data-theme="dark"] .coupon-section {
+    background: rgba(14, 14, 16, 0.75);
+    border-color: rgba(244, 239, 230, 0.10);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+}
+
+[data-theme="dark"] .cart-card:hover,
+[data-theme="dark"] .cart-card:focus-within {
+    border-color: rgba(201,168,106,0.45);
+    box-shadow: 0 22px 70px rgba(0,0,0,0.55);
+}
+
+[data-theme="dark"] .qty-controls {
+    background: rgba(244,239,230,0.06);
+    border-color: rgba(244,239,230,0.12);
+}
+
+[data-theme="dark"] .qty-value {
+    color: rgba(244,239,230,0.92);
+    border-color: rgba(244,239,230,0.12);
 }
 
 /* ══ LOADING STATES ══ */

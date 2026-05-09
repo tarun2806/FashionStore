@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Remove the item card from DOM
             const itemCard = document.getElementById(`cart-item-${data.cartItemId}`);
             if (itemCard) {
-                itemCard.style.opacity = '0';
+                itemCard.classList.add('is-removing');
                 setTimeout(() => {
                     itemCard.remove();
                     checkEmptyCart();

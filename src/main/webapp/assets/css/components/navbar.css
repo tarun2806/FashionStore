@@ -290,6 +290,7 @@
     background: var(--color-bg-tertiary);
     color: var(--color-text-primary);
     transform: translateY(-2px);
+    box-shadow: 0 10px 26px rgba(0,0,0,0.08), var(--glow-gold);
 }
 
 .nav-icon-btn:focus-visible {
@@ -378,6 +379,7 @@
     transform: translateY(-8px);
     transition: all var(--transition-fast);
     z-index: var(--z-dropdown);
+    transform-origin: top right;
 }
 
 .account-dropdown.open {
@@ -660,6 +662,7 @@
 
 [data-theme="dark"] .nav-icon-btn:hover {
     background: var(--color-bg-tertiary-dark);
+    box-shadow: 0 10px 26px rgba(0,0,0,0.55), var(--lux-glow-gold, var(--glow-gold));
 }
 
 [data-theme="dark"] .account-avatar {

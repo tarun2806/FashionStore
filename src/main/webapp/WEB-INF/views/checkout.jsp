@@ -62,7 +62,7 @@
             <div class="checkout-form-col">
                 <form action="<%= request.getContextPath() %>/checkout" method="post" class="modern-form" id="checkoutForm">
                     <% String formError = (String) request.getAttribute("error"); %>
-                    <div id="form-error" class="form-error" style="<%= formError != null ? "display:block;" : "display:none;" %>color:var(--color-danger);margin-bottom:var(--space-4);padding:var(--space-3);background:#FEF2F2;border-radius:var(--radius-md);font-size:var(--text-sm);">
+                    <div id="form-error" class="checkout-form-error" style="<%= formError != null ? "display:block;" : "display:none;" %>">
                         <%= formError != null ? formError : "" %>
                     </div>
                     <input type="hidden" name="csrf_token" value="<%= request.getAttribute("csrfToken") != null ? request.getAttribute("csrfToken") : "" %>">

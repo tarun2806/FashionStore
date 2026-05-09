@@ -58,6 +58,8 @@
         </div>
     </section>
 
+    <div class="divider-luxury"></div>
+
     <% if (!categories.isEmpty()) { %>
     <section class="section-spacer-lg">
         <div class="container">
@@ -76,6 +78,8 @@
     </section>
     <% } %>
 
+    <div class="divider-luxury"></div>
+
     <section class="container editorial-band reveal-on-scroll">
         <div class="editorial-copy">
             <span class="home-section-label">The Edit</span>
@@ -87,6 +91,8 @@
         <div class="editorial-image editorial-image-secondary" aria-hidden="true"></div>
     </section>
 
+    <div class="divider-luxury"></div>
+
     <section class="container editorial-band editorial-band-reverse reveal-on-scroll">
         <div class="editorial-image editorial-image-urban" aria-hidden="true"></div>
         <div class="editorial-copy editorial-copy-light">
@@ -97,6 +103,8 @@
         </div>
         <div class="editorial-image editorial-image-tailoring" aria-hidden="true"></div>
     </section>
+
+    <div class="divider-luxury"></div>
 
     <section class="container featured-section reveal-on-scroll">
         <div class="section-head">

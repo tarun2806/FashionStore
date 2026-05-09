@@ -49,11 +49,16 @@
     aspect-ratio: 4/5;
     object-fit: cover;
     border-radius: var(--radius-md);
-    transition: transform var(--transition-slow);
+    transition: transform var(--transition-slow), opacity 220ms var(--ease-out), filter 220ms var(--ease-out);
 }
 
 .product-gallery-main:hover img {
     transform: scale(1.03);
+}
+
+.product-gallery-main.is-switching img {
+    opacity: 0;
+    filter: saturate(0.95);
 }
 
 .product-gallery-thumbs {

@@ -86,6 +86,25 @@
 }
 
 /* ============================================
+   FILTER INPUTS (remove inline styles)
+   ============================================ */
+
+.price-inputs {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    margin-bottom: var(--space-3);
+}
+
+.price-inputs .form-input {
+    padding: var(--space-2);
+}
+
+.filter-clear-btn {
+    margin-top: var(--space-2);
+}
+
+/* ============================================
    PAGINATION
    ============================================ */
 
@@ -154,7 +173,10 @@
     font-size: var(--text-sm);
 }
 
-/* ============================================/* Empty States - Unified in style.css (authoritative) */
+/* ============================================
+   EMPTY STATE
+   ============================================ */
+/* Empty States - Unified in style.css (authoritative) */
 
 /* ============================================
    RESPONSIVE

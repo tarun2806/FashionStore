@@ -11,6 +11,9 @@ window.FashionStore = {
             if (stored) {
                 if (stored === 'dark') {
                     document.documentElement.classList.add(this.DARK_CLASS);
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    document.documentElement.removeAttribute('data-theme');
                 }
                 return;
             }
@@ -18,12 +21,17 @@ window.FashionStore = {
             // Fall back to system preference
             if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
                 document.documentElement.classList.add(this.DARK_CLASS);
+                document.documentElement.setAttribute('data-theme', 'dark');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
             }
         },
         
         toggle: function() {
             const html = document.documentElement;
             const isDark = html.classList.toggle(this.DARK_CLASS);
+            if (isDark) html.setAttribute('data-theme', 'dark');
+            else html.removeAttribute('data-theme');
             localStorage.setItem(this.STORAGE_KEY, isDark ? 'dark' : 'light');
             return isDark;
         },
@@ -730,41 +738,6 @@ window.FashionStore = {
             FashionStore.hideLoading(cartItem);
         });
     },
-
-    // Show loading state on an element
-    showLoading: function(element, message) {
-        if (!element) return;
-        element.style.opacity = '0.5';
-        element.style.pointerEvents = 'none';
-    },
-
-    // Hide loading state on an element
-    hideLoading: function(element) {
-        if (!element) return;
-        element.style.opacity = '1';
-        element.style.pointerEvents = 'auto';
-    },
-
-    // Fetch cart (for refresh after save for later)
-    fetchCart: function() {
-        const contextPath = document.querySelector('.cart-page')?.getAttribute('data-context-path') || window.contextPath || '';
-        fetch(`${contextPath}/cart`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-Token': window.csrfToken || ''
-            },
-            body: new URLSearchParams({ action: 'get' })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                FashionStore.updateMiniCartUI(data);
-            }
-        })
-        .catch(err => console.error('Error fetching cart:', err));
-    }
 };
 
 // Mini Cart Drawer
@@ -816,32 +789,48 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const revealItems = document.querySelectorAll('.reveal-on-scroll');
-    if ('IntersectionObserver' in window && revealItems.length) {
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach((entry) => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('is-visible');
-                    observer.unobserve(entry.target);
-                }
+    // PDP gallery: thumbnail click swaps main image with fade
+    const galleryMain = document.querySelector('.product-gallery-main');
+    const mainImg = galleryMain?.querySelector('img');
+    const thumbs = document.querySelectorAll('.product-gallery-thumbs .gallery-thumb');
+    if (galleryMain && mainImg && thumbs.length) {
+        thumbs.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const img = btn.querySelector('img');
+                const nextSrc = img?.getAttribute('src');
+                if (!nextSrc || nextSrc === mainImg.getAttribute('src')) return;
+
+                thumbs.forEach((t) => t.classList.remove('active'));
+                btn.classList.add('active');
+
+                galleryMain.classList.add('is-switching');
+                window.setTimeout(() => {
+                    mainImg.setAttribute('src', nextSrc);
+                    mainImg.setAttribute('loading', 'eager');
+                }, 140);
+                window.setTimeout(() => {
+                    galleryMain.classList.remove('is-switching');
+                }, 260);
             });
-        }, { threshold: 0.12 });
-        revealItems.forEach((item) => observer.observe(item));
-    } else {
-        revealItems.forEach((item) => item.classList.add('is-visible'));
+        });
     }
 
-    document.querySelectorAll('button, .btn, .product-card-add-btn').forEach((button) => {
-        button.addEventListener('click', (event) => {
-            const ripple = document.createElement('span');
-            ripple.className = 'button-ripple';
-            const rect = button.getBoundingClientRect();
-            ripple.style.left = `${event.clientX - rect.left}px`;
-            ripple.style.top = `${event.clientY - rect.top}px`;
-            button.appendChild(ripple);
-            window.setTimeout(() => ripple.remove(), 520);
-        });
-    });
+    // Delegated ripple (single listener, avoids per-button handlers)
+    document.addEventListener('click', (event) => {
+        const target = event.target.closest('button, .btn, .product-card-add-btn');
+        if (!target) return;
+
+        // Don’t ripple disabled controls
+        if (target.matches('button:disabled, .btn:disabled')) return;
+
+        const ripple = document.createElement('span');
+        ripple.className = 'button-ripple';
+        const rect = target.getBoundingClientRect();
+        ripple.style.left = `${event.clientX - rect.left}px`;
+        ripple.style.top = `${event.clientY - rect.top}px`;
+        target.appendChild(ripple);
+        window.setTimeout(() => ripple.remove(), 520);
+    }, { passive: true });
 });
 
 // Backward compatibility

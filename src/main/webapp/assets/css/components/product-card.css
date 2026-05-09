@@ -20,10 +20,17 @@
     cursor: pointer;
 }
 
-.product-card:hover {
-    transform: translateY(-4px);
+@media (hover: hover) and (pointer: fine) {
+    .product-card:hover {
+        transform: translateY(-5px);
+        box-shadow: var(--shadow-xl);
+        border-color: var(--color-border-strong);
+    }
+}
+
+.product-card:focus-within {
     box-shadow: var(--shadow-lg);
-    border-color: var(--color-border-strong);
+    border-color: var(--color-champagne);
 }
 
 /* ============================================
@@ -87,6 +94,16 @@
     z-index: 2;
 }
 
+.product-card-badges {
+    position: absolute;
+    top: var(--space-3);
+    left: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    z-index: 2;
+}
+
 .badge {
     display: inline-flex;
     align-items: center;
@@ -117,6 +134,40 @@
     border: 1px solid rgba(212, 175, 55, 0.3);
 }
 
+/* Legacy badge markup used in some JSPs */
+.product-card-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wider);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    background: var(--gradient-gold);
+    color: white;
+    border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+.product-card-badge.new,
+.product-card-badge.badge-new {
+    background: var(--gradient-emerald);
+    border-color: var(--color-success-border);
+}
+
+.product-card-badge.sale,
+.product-card-badge.badge-sale {
+    background: var(--gradient-danger);
+    border-color: var(--color-danger-border);
+}
+
+.product-card-badge.trending,
+.product-card-badge.badge-trending {
+    background: var(--gradient-gold);
+    border-color: rgba(212, 175, 55, 0.3);
+}
+
 /* ============================================
    WISHLIST BUTTON - Premium
    ============================================ */
@@ -144,6 +195,11 @@
 }
 
 .product-card:hover .product-card-wishlist {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.product-card:focus-within .product-card-wishlist {
     opacity: 1;
     transform: translateY(0);
 }
@@ -200,6 +256,11 @@
 }
 
 .product-card:hover .product-card-quick-add {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.product-card:focus-within .product-card-quick-add {
     opacity: 1;
     transform: translateY(0);
 }

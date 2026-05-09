@@ -24,13 +24,17 @@
         
         initScrollReveal: function() {
             const revealElements = document.querySelectorAll('[data-reveal]');
+            const legacyReveal = document.querySelectorAll('.reveal-on-scroll');
             
-            if (revealElements.length === 0) return;
+            if (revealElements.length === 0 && legacyReveal.length === 0) return;
             
             const revealObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         entry.target.classList.add('revealed');
+                        if (entry.target.classList.contains('reveal-on-scroll')) {
+                            entry.target.classList.add('is-visible');
+                        }
                         revealObserver.unobserve(entry.target);
                     }
                 });
@@ -41,6 +45,12 @@
             
             revealElements.forEach(el => {
                 el.classList.add('reveal-hidden');
+                revealObserver.observe(el);
+            });
+
+            // Consolidate legacy `.reveal-on-scroll` into this single observer
+            legacyReveal.forEach((el) => {
+                // Keep existing styling contract: `.is-visible` is the “revealed” state.
                 revealObserver.observe(el);
             });
         },
@@ -164,6 +174,11 @@
         .revealed {
             opacity: 1 !important;
             transform: translateY(0) translateX(0) scale(1) !important;
+        }
+
+        .reveal-on-scroll.is-visible {
+            opacity: 1 !important;
+            transform: translateY(0) !important;
         }
         
         [data-stagger] > * {
