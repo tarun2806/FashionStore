@@ -15,15 +15,15 @@
 
 @media (hover: hover) and (pointer: fine) {
     .product-card:hover {
-        transform: translateY(-4px);
-        box-shadow: var(--shadow-lg);
-        border-color: var(--color-primary);
+        transform: translateY(-6px);
+        box-shadow: var(--shadow-xl);
+        border-color: var(--color-border-strong);
     }
 }
 
 .product-card:focus-within {
-    box-shadow: var(--shadow-sm);
-    border-color: var(--color-border-strong);
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-primary);
 }
 
 /* ============================================
@@ -42,11 +42,11 @@
     height: 100%;
     object-fit: cover;
     object-position: center top;
-    transition: transform var(--transition-slow) var(--ease-premium);
+    transition: transform 600ms var(--ease-premium);
 }
 
 .product-card:hover .product-card-image {
-    transform: scale(1.08);
+    transform: scale(1.12);
 }
 
 /* ============================================
@@ -82,7 +82,8 @@
     text-transform: uppercase;
     letter-spacing: var(--letter-spacing-wider);
     border-radius: var(--radius-sm);
-    box-shadow: none;
+    box-shadow: var(--shadow-xs);
+    backdrop-filter: blur(8px);
 }
 
 .badge-new {
@@ -110,10 +111,11 @@
     text-transform: uppercase;
     letter-spacing: var(--letter-spacing-wider);
     border-radius: var(--radius-sm);
-    box-shadow: none;
+    box-shadow: var(--shadow-xs);
     background: #111;
     color: white;
     border: none;
+    backdrop-filter: blur(8px);
 }
 
 .product-card-badge.new,
@@ -139,8 +141,8 @@
     position: absolute;
     top: var(--space-3);
     right: var(--space-3);
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 42px;
     background: rgba(255, 255, 255, 0.95);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-full);
@@ -148,25 +150,11 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: all var(--transition-hover);
     z-index: 10;
     box-shadow: var(--shadow-sm);
-}
-
-.product-card-wishlist:hover {
-    background: white;
-    border-color: var(--color-primary);
-    transform: scale(1.1);
-    box-shadow: var(--shadow-md);
-}
-
-.product-card-wishlist.active {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-}
-
-.product-card-wishlist.active svg {
-    color: white;
+    opacity: 0;
+    transform: translateY(-8px);
 }
 
 .product-card:hover .product-card-wishlist {
@@ -179,10 +167,30 @@
     transform: translateY(0);
 }
 
+.product-card-wishlist:hover {
+    background: white;
+    border-color: var(--color-primary);
+    transform: scale(1.15);
+    box-shadow: var(--shadow-md);
+}
+
+.product-card-wishlist.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    transform: scale(1.1);
+}
+
+.product-card-wishlist.active svg {
+    color: white;
+    transform: scale(1.1);
+    transition: transform 200ms var(--ease-premium);
+}
+
 .product-card-wishlist svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     color: var(--color-text-primary);
+    transition: transform 200ms var(--ease-premium), color 200ms var(--ease-premium);
 }
 
 /* ============================================
@@ -195,16 +203,17 @@
     left: var(--space-3);
     right: var(--space-3);
     padding: var(--space-3);
-    background: var(--color-surface);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(8px);
     transition:
         opacity var(--transition-hover),
         transform var(--transition-hover);
     z-index: 2;
-    box-shadow: var(--shadow-xs);
+    box-shadow: var(--shadow-md);
 }
 
 .product-card:hover .product-card-quick-add {
@@ -219,7 +228,7 @@
 
 .quick-add-btn {
     width: 100%;
-    padding: var(--space-2) var(--space-3);
+    padding: var(--space-3);
     background: var(--color-primary);
     color: var(--color-text-inverse);
     font-size: var(--text-sm);
@@ -227,15 +236,16 @@
     border: none;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 200ms var(--ease-premium),
+                background 200ms var(--ease-premium),
+                box-shadow 200ms var(--ease-premium);
+    letter-spacing: 0.01em;
 }
 
 .quick-add-btn:hover {
     background: var(--color-primary-hover);
-    transform: translateY(-0.5px);
-    box-shadow: var(--shadow-xs);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
 }
 
 .quick-add-btn:active {
@@ -327,6 +337,7 @@
     font-weight: var(--font-weight-semibold);
     border-radius: var(--radius-sm);
     letter-spacing: var(--letter-spacing-tight);
+    box-shadow: var(--shadow-xs);
 }
 
 /* ============================================
@@ -348,12 +359,13 @@
     font-weight: var(--font-weight-medium);
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: border-color var(--transition-fast);
+    transition: all var(--transition-fast);
 }
 
 .product-card-size:hover {
     border-color: var(--color-primary);
     color: var(--color-text-primary);
+    transform: translateY(-1px);
 }
 
 .product-card-size.out-of-stock {
@@ -366,6 +378,7 @@
     background: var(--color-primary);
     color: var(--color-text-inverse);
     border-color: var(--color-primary);
+    transform: translateY(-1px);
 }
 
 /* ============================================
@@ -395,7 +408,7 @@
 
 .product-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: clamp(var(--space-4), 2vw, var(--space-6));
 }
 
@@ -405,7 +418,7 @@
 
 @media (max-width: 1024px) {
     .product-grid {
-        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
         gap: var(--space-4);
     }
 }
@@ -444,4 +457,8 @@
 
 [data-theme="dark"] .product-card-wishlist svg {
     color: var(--color-text-primary);
+}
+
+[data-theme="dark"] .product-card-quick-add {
+    background: rgba(22, 22, 21, 0.95);
 }

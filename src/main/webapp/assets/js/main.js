@@ -741,23 +741,58 @@ window.FashionStore = {
         const badgeEl = document.getElementById('nav-cart-badge');
 
         if (!data.cartItems || data.cartItems.length === 0) {
-            itemsContainer.innerHTML = '<div class="mini-cart-empty">Your cart is empty.</div>';
+            itemsContainer.innerHTML = `
+                <div class="mini-cart-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="9" cy="21" r="1"/>
+                        <circle cx="20" cy="21" r="1"/>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                    </svg>
+                    <h4>Your cart is empty</h4>
+                    <p>Add items to get started</p>
+                </div>
+            `;
         } else {
             let html = '';
             data.cartItems.forEach(item => {
+                const itemTotal = item.price * item.quantity;
                 html += `
-                    <div class="mini-cart-item">
-                        <img src="${item.imageUrl || ''}" alt="${item.productName}" onerror="this.style.display='none'">
+                    <div class="mini-cart-item" data-id="${item.cartItemId}">
+                        <a href="${contextPath}/product?id=${item.productId}" class="mini-cart-item-image">
+                            <img src="${item.imageUrl || ''}" alt="${item.productName}" onerror="this.src='${contextPath}/assets/images/placeholder-product.jpg'">
+                        </a>
                         <div class="mini-cart-item-details">
-                            <h4>${item.productName || 'Product'}</h4>
-                            <p>Size: ${item.sizeLabel || 'M'}</p>
-                            <p>Qty: ${item.quantity}</p>
-                            <p class="mini-cart-price">₹${item.price.toFixed(2)}</p>
+                            <h4><a href="${contextPath}/product?id=${item.productId}">${item.productName || 'Product'}</a></h4>
+                            <div class="mini-cart-item-meta">
+                                <span><span class="mini-cart-item-meta-label">Size</span>${item.sizeLabel || 'M'}</span>
+                                <span><span class="mini-cart-item-meta-label">Price</span>₹${item.price.toFixed(2)}</span>
+                            </div>
+                            <div class="mini-cart-item-qty">
+                                <button type="button" class="mini-cart-qty-btn mini-cart-qty-decrease" data-id="${item.cartItemId}" data-qty="${item.quantity}" ${item.quantity <= 1 ? 'disabled' : ''}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                                        <line x1="5" y1="12" x2="19" y2="12"/>
+                                    </svg>
+                                </button>
+                                <span class="mini-cart-qty-value">${item.quantity}</span>
+                                <button type="button" class="mini-cart-qty-btn mini-cart-qty-increase" data-id="${item.cartItemId}" data-qty="${item.quantity}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                                        <line x1="12" y1="5" x2="12" y2="19"/>
+                                        <line x1="5" y1="12" x2="19" y2="12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mini-cart-item-actions">
+                            <span class="mini-cart-item-price">₹${itemTotal.toFixed(2)}</span>
+                            <button type="button" class="mini-cart-remove-btn" data-id="${item.cartItemId}">Remove</button>
                         </div>
                     </div>
                 `;
             });
             itemsContainer.innerHTML = html;
+            
+            // Attach event listeners to new buttons
+            FashionStore.attachMiniCartListeners();
         }
 
         if (totalPriceEl) {
@@ -766,6 +801,107 @@ window.FashionStore = {
         if (badgeEl) {
             badgeEl.innerText = data.cartCount || 0;
         }
+    },
+    
+    // Attach event listeners to mini cart buttons
+    attachMiniCartListeners: function() {
+        // Quantity decrease buttons
+        document.querySelectorAll('.mini-cart-qty-decrease').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const cartItemId = this.getAttribute('data-id');
+                const currentQty = parseInt(this.getAttribute('data-qty'));
+                FashionStore.updateMiniCartQty(cartItemId, currentQty - 1);
+            });
+        });
+        
+        // Quantity increase buttons
+        document.querySelectorAll('.mini-cart-qty-increase').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const cartItemId = this.getAttribute('data-id');
+                const currentQty = parseInt(this.getAttribute('data-qty'));
+                FashionStore.updateMiniCartQty(cartItemId, currentQty + 1);
+            });
+        });
+        
+        // Remove buttons
+        document.querySelectorAll('.mini-cart-remove-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const cartItemId = this.getAttribute('data-id');
+                FashionStore.removeMiniCartItem(cartItemId);
+            });
+        });
+    },
+    
+    // Update mini cart quantity
+    updateMiniCartQty: function(cartItemId, newQty) {
+        const params = new URLSearchParams();
+        params.append('action', 'update');
+        params.append('cartItemId', cartItemId);
+        params.append('currentQty', newQty);
+
+        fetch(`${contextPath}/cart`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': window.csrfToken || ''
+            },
+            body: params
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success || data.status === 'success') {
+                FashionStore.updateMiniCartUI(data);
+                FashionStore.showToast('Cart updated', 'success');
+            } else {
+                FashionStore.showToast(data.message || 'Failed to update cart', 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Mini cart update error:', err);
+            FashionStore.showToast('Failed to update cart', 'error');
+        });
+    },
+    
+    // Remove item from mini cart
+    removeMiniCartItem: function(cartItemId) {
+        const itemEl = document.querySelector(`.mini-cart-item[data-id="${cartItemId}"]`);
+        if (itemEl) {
+            itemEl.classList.add('removing');
+        }
+        
+        const params = new URLSearchParams();
+        params.append('action', 'remove');
+        params.append('cartItemId', cartItemId);
+        params.append('currentQty', 0);
+
+        fetch(`${contextPath}/cart`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': window.csrfToken || ''
+            },
+            body: params
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success || data.status === 'success') {
+                FashionStore.updateMiniCartUI(data);
+                FashionStore.showToast('Item removed', 'success');
+            } else {
+                FashionStore.showToast(data.message || 'Failed to remove item', 'error');
+                if (itemEl) itemEl.classList.remove('removing');
+            }
+        })
+        .catch(err => {
+            console.error('Mini cart remove error:', err);
+            FashionStore.showToast('Failed to remove item', 'error');
+            if (itemEl) itemEl.classList.remove('removing');
+        });
     },
 
     // Fetch Cart Data

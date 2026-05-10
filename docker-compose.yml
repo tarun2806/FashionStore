@@ -1,74 +1,63 @@
+
 services:
-  # MySQL Database
   mysql:
     image: mysql:8.0
     container_name: fashionstore-mysql
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
-      MYSQL_DATABASE: ${DB_NAME:-fashionstore}
-      MYSQL_USER: ${DB_USER:-fashionstore}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-fashionstore}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-fashionstore}
+      MYSQL_USER: ${MYSQL_USER:-fashionstore}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-fashionstorepass}
     ports:
       - "3306:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
-    restart: unless-stopped
+      - mysql-data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     networks:
       - fashionstore-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: fashionstore-redis
-    command: >
-      sh -c 'if [ -n "$$REDIS_PASSWORD" ];
-      then redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass "$$REDIS_PASSWORD";
-      else redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru;
-      fi'
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
     restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
     networks:
       - fashionstore-network
     healthcheck:
-      test: ["CMD-SHELL", "if [ -n \"$${REDIS_PASSWORD}\" ]; then redis-cli -a \"$${REDIS_PASSWORD}\" ping; else redis-cli ping; fi"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    command: redis-server --appendonly yes
 
-  # Application
-  app:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: fashionstore-app
+    container_name: fashionstore-backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: host.docker.internal
+      DB_PORT: 3306
+      DB_NAME: fashionstore
+      DB_USER: root
+      DB_PASSWORD: Tarun@1605
+      REDIS_HOST: host.docker.internal
+      REDIS_PORT: 6379
+      CSRF_ENABLED: ${CSRF_ENABLED:-true}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      ENV: production
     ports:
       - "8080:8080"
-    environment:
-      - APP_ENV=${APP_ENV:-production}
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_NAME=${DB_NAME:-fashionstore}
-      - DB_USER=${DB_USER:-fashionstore}
-      - DB_PASSWORD=${DB_PASSWORD:-fashionstore}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-      - REDIS_ENABLED=true
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
     networks:
       - fashionstore-network
     healthcheck:
@@ -76,29 +65,46 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
 
-  # Nginx Reverse Proxy
+  admin-frontend:
+    build:
+      context: ./fashionstore-admin
+      dockerfile: Dockerfile
+    container_name: fashionstore-admin-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    networks:
+      - fashionstore-network
+    depends_on:
+      - backend
+
   nginx:
     image: nginx:alpine
     container_name: fashionstore-nginx
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-      - nginx_logs:/var/log/nginx
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
-      - app
-    restart: unless-stopped
+      - backend
+      - admin-frontend
     networks:
       - fashionstore-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
-  mysql_data:
-  redis_data:
-  nginx_logs:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
 
 networks:
   fashionstore-network:

@@ -28,6 +28,12 @@
 <link rel="stylesheet" href="<%= request.getContextPath() %>/assets/css/reset.css">
 <link rel="stylesheet" href="<%= request.getContextPath() %>/assets/css/base.css">
 
+<%-- Global context and CSRF must be set before any external script reads them --%>
+<script>
+    window.contextPath = '<%= request.getContextPath() %>';
+    window.csrfToken = '<%= request.getAttribute("csrfToken") != null ? org.apache.commons.text.StringEscapeUtils.escapeEcmaScript(request.getAttribute("csrfToken").toString()) : "" %>';
+</script>
+
 <%-- Main JavaScript --%>
 <script src="<%= request.getContextPath() %>/assets/js/splash-screen.js"></script>
 <script src="<%= request.getContextPath() %>/assets/js/animations.js"></script>

@@ -62,11 +62,16 @@ public class LoginController extends HttpServlet {
                 CSRFProtection.generateToken(request);
 
                 AuditLogger.log("LOGIN_SUCCESS", "User logged in: " + email, String.valueOf(user.getUserId()), request);
-                
+
                 // Reset rate limit on successful login
                 RateLimiter.resetRateLimit(request, "/login");
 
-                response.sendRedirect(request.getContextPath() + "/home");
+                // Redirect based on role
+                if (user.isAdmin()) {
+                    response.sendRedirect(request.getContextPath() + "/admin/dashboard");
+                } else {
+                    response.sendRedirect(request.getContextPath() + "/home");
+                }
             } else {
                 request.setAttribute("error", "Invalid email or password");
                 AuditLogger.log("LOGIN_FAILED", "Failed login attempt: " + email, null, request);

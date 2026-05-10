@@ -36,12 +36,12 @@
     <% if (product != null) { %>
     <div class="image-section">
         <div class="product-gallery-main">
-            <img src="<%= product.getImageUrl() %>" alt="<%= product.getProductName() %>">
+            <img src="<%= product.getImageUrl() %>" alt="<%= product.getProductName() %>" onerror="this.src='<%= request.getContextPath() %>/assets/images/placeholder-product.jpg'; this.onerror=null;">
         </div>
         <div class="product-gallery-thumbs" aria-label="Product gallery">
-            <button type="button" class="gallery-thumb active"><img src="<%= product.getImageUrl() %>" alt=""></button>
-            <button type="button" class="gallery-thumb"><img src="<%= product.getImageUrl() %>" alt=""></button>
-            <button type="button" class="gallery-thumb"><img src="<%= product.getImageUrl() %>" alt=""></button>
+            <button type="button" class="gallery-thumb active"><img src="<%= product.getImageUrl() %>" alt="" onerror="this.src='<%= request.getContextPath() %>/assets/images/placeholder-product.jpg'; this.onerror=null;"></button>
+            <button type="button" class="gallery-thumb"><img src="<%= product.getImageUrl() %>" alt="" onerror="this.src='<%= request.getContextPath() %>/assets/images/placeholder-product.jpg'; this.onerror=null;"></button>
+            <button type="button" class="gallery-thumb"><img src="<%= product.getImageUrl() %>" alt="" onerror="this.src='<%= request.getContextPath() %>/assets/images/placeholder-product.jpg'; this.onerror=null;"></button>
         </div>
     </div>
 

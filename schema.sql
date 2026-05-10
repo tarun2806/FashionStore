@@ -1,8 +1,8 @@
 -- ============================================================
 -- FASHIONSTORE COMPLETE DATABASE SCHEMA
 -- Single-file setup for fresh installations
--- Merged from: schema.sql + all database/migration_*.sql files
--- Created: May 8, 2026
+-- Consolidated from: schema.sql + migration_007 + migration_008 + database_optimization.sql
+-- Created: May 10, 2026
 -- ============================================================
 
 DROP DATABASE IF EXISTS fashionstore;
@@ -226,9 +226,15 @@ CREATE TABLE payments (
     order_id INT NOT NULL,
     payment_method VARCHAR(50) NOT NULL,
     transaction_id VARCHAR(255) NOT NULL,
+    stripe_payment_intent_id VARCHAR(255),
+    stripe_client_secret VARCHAR(255),
+    stripe_payment_method_id VARCHAR(255),
+    stripe_customer_id VARCHAR(255),
+    idempotency_key VARCHAR(255),
+    stripe_metadata TEXT,
     amount DECIMAL(10, 2) NOT NULL,
     currency VARCHAR(3) DEFAULT 'INR',
-    status VARCHAR(50) DEFAULT 'PENDING',
+    status ENUM('pending', 'processing', 'requires_payment_method', 'requires_confirmation', 'requires_action', 'succeeded', 'canceled', 'failed', 'refunded') DEFAULT 'pending',
     gateway_response TEXT,
     payment_signature VARCHAR(255),
     webhook_id VARCHAR(255),
@@ -239,8 +245,11 @@ CREATE TABLE payments (
     INDEX idx_order_id (order_id),
     INDEX idx_transaction_id (transaction_id),
     INDEX idx_status (status),
-    INDEX idx_verified (verified)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Payment transactions with verification';
+    INDEX idx_verified (verified),
+    INDEX idx_stripe_payment_intent (stripe_payment_intent_id),
+    INDEX idx_stripe_customer (stripe_customer_id),
+    INDEX idx_idempotency_key (idempotency_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Payment transactions with Stripe integration';
 
 -- PAYMENT METHODS
 CREATE TABLE payment_methods (
@@ -256,11 +265,16 @@ CREATE TABLE payment_methods (
     is_default BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     gateway_token VARCHAR(255),
+    stripe_payment_method_id VARCHAR(255),
+    stripe_customer_id VARCHAR(255),
+    fingerprint VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     INDEX idx_user_payment_methods (user_id),
-    INDEX idx_user_default (user_id, is_default)
+    INDEX idx_user_default (user_id, is_default),
+    INDEX idx_stripe_payment_method (stripe_payment_method_id),
+    INDEX idx_stripe_customer_method (stripe_customer_id, stripe_payment_method_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- PAYMENT TRANSACTIONS
@@ -269,6 +283,9 @@ CREATE TABLE payment_transactions (
     order_id INT NOT NULL,
     payment_method_id INT,
     gateway_transaction_id VARCHAR(255) NOT NULL,
+    stripe_payment_intent_id VARCHAR(255),
+    stripe_charge_id VARCHAR(255),
+    stripe_refund_id VARCHAR(255),
     gateway VARCHAR(50) NOT NULL,
     amount DECIMAL(10,2) NOT NULL,
     currency VARCHAR(3) DEFAULT 'INR',
@@ -276,13 +293,18 @@ CREATE TABLE payment_transactions (
     payment_method_type VARCHAR(50),
     gateway_response TEXT,
     failure_reason TEXT,
+    failure_code VARCHAR(50),
+    decline_code VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
     FOREIGN KEY (payment_method_id) REFERENCES payment_methods(payment_method_id) ON DELETE SET NULL,
     INDEX idx_transaction_order (order_id),
     INDEX idx_transaction_gateway (gateway, status),
-    INDEX idx_transaction_created (created_at)
+    INDEX idx_transaction_created (created_at),
+    INDEX idx_stripe_payment_intent_transaction (stripe_payment_intent_id),
+    INDEX idx_stripe_charge (stripe_charge_id),
+    INDEX idx_stripe_refund (stripe_refund_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- PASSWORD RESET TOKENS
@@ -298,6 +320,76 @@ CREATE TABLE password_reset_tokens (
     INDEX idx_user_id (user_id),
     INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- USER SETTINGS
+CREATE TABLE user_settings (
+    setting_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL UNIQUE,
+    email_notifications BOOLEAN DEFAULT TRUE,
+    sms_notifications BOOLEAN DEFAULT FALSE,
+    order_updates BOOLEAN DEFAULT TRUE,
+    promotional_emails BOOLEAN DEFAULT FALSE,
+    newsletter_subscription BOOLEAN DEFAULT FALSE,
+    language VARCHAR(10) DEFAULT 'en',
+    currency VARCHAR(3) DEFAULT 'INR',
+    theme_preference ENUM('light', 'dark', 'auto') DEFAULT 'auto',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='User account preferences and settings';
+
+-- USER PROFILES
+CREATE TABLE user_profiles (
+    profile_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL UNIQUE,
+    date_of_birth DATE,
+    profile_image_url VARCHAR(255),
+    bio TEXT,
+    preferred_shipping_address_id INT,
+    preferred_billing_address_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (preferred_shipping_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL,
+    FOREIGN KEY (preferred_billing_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Extended user profile information';
+
+-- STRIPE WEBHOOK EVENTS
+CREATE TABLE stripe_webhook_events (
+    webhook_event_id INT AUTO_INCREMENT PRIMARY KEY,
+    stripe_event_id VARCHAR(255) UNIQUE NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    livemode BOOLEAN DEFAULT FALSE,
+    api_version VARCHAR(50),
+    request_id VARCHAR(255),
+    created TIMESTAMP,
+    data_json TEXT NOT NULL,
+    processed BOOLEAN DEFAULT FALSE,
+    processed_at TIMESTAMP NULL,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_stripe_event_id (stripe_event_id),
+    INDEX idx_event_type (event_type),
+    INDEX idx_processed (processed),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Stripe webhook event logs for audit and replay';
+
+-- STRIPE CUSTOMERS
+CREATE TABLE stripe_customers (
+    stripe_customer_db_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    stripe_customer_key VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255),
+    name VARCHAR(255),
+    phone VARCHAR(20),
+    default_payment_method_id VARCHAR(255),
+    livemode BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    INDEX idx_user_stripe_customer (user_id),
+    INDEX idx_stripe_customer_key (stripe_customer_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Stripe customer ID mappings for users';
 
 -- ============================================================
 -- 5. COUPON & DISCOUNT TABLES
@@ -783,7 +875,290 @@ INSERT INTO search_analytics (search_query, search_count, result_count_avg, clic
 ('sale', 234, 32.1, 58.9, NOW());
 
 -- ============================================================
--- 15. COMPLETION
+-- 15. MIGRATION VIEWS & TRIGGERS
+-- ============================================================
+
+-- View for user addresses with user info
+CREATE OR REPLACE VIEW v_user_addresses AS
+SELECT
+    a.address_id,
+    a.user_id,
+    u.email,
+    a.address_type,
+    a.full_name,
+    a.phone,
+    a.address_line1,
+    a.address_line2,
+    a.city,
+    a.state,
+    a.postal_code,
+    a.country,
+    a.is_default,
+    a.created_at,
+    a.updated_at
+FROM addresses a
+JOIN users u ON a.user_id = u.user_id
+WHERE a.is_active = TRUE;
+
+-- View for complete user profile
+CREATE OR REPLACE VIEW v_user_complete_profile AS
+SELECT
+    u.user_id,
+    u.full_name,
+    u.email,
+    u.phone,
+    u.gender,
+    u.role,
+    u.is_active,
+    u.created_at as user_created_at,
+    us.email_notifications,
+    us.sms_notifications,
+    us.order_updates,
+    us.promotional_emails,
+    us.newsletter_subscription,
+    us.language,
+    us.currency,
+    us.theme_preference,
+    up.date_of_birth,
+    up.profile_image_url,
+    up.bio,
+    up.preferred_shipping_address_id,
+    up.preferred_billing_address_id,
+    (SELECT COUNT(*) FROM addresses WHERE user_id = u.user_id AND is_active = TRUE) as total_addresses
+FROM users u
+LEFT JOIN user_settings us ON u.user_id = us.user_id
+LEFT JOIN user_profiles up ON u.user_id = up.user_id;
+
+-- Trigger to ensure only one default address per user per type
+DELIMITER //
+CREATE TRIGGER ensure_single_default_address
+BEFORE UPDATE ON addresses
+FOR EACH ROW
+BEGIN
+    IF NEW.is_default = TRUE AND (OLD.is_default = FALSE OR OLD.is_default IS NULL) THEN
+        UPDATE addresses SET is_default = FALSE
+        WHERE user_id = NEW.user_id
+        AND address_type = NEW.address_type
+        AND address_id != NEW.address_id;
+    END IF;
+END//
+
+-- Trigger to set default address on first insert
+CREATE TRIGGER set_default_on_first_address
+BEFORE INSERT ON addresses
+FOR EACH ROW
+BEGIN
+    DECLARE address_count INT;
+    SELECT COUNT(*) INTO address_count FROM addresses WHERE user_id = NEW.user_id AND address_type = NEW.address_type;
+    IF address_count = 0 THEN
+        SET NEW.is_default = TRUE;
+    END IF;
+END//
+DELIMITER ;
+
+-- ============================================================
+-- 16. OPTIMIZATION INDEXES & PROCEDURES
+-- ============================================================
+
+-- Additional performance indexes
+CREATE INDEX idx_addresses_user_type ON addresses(user_id, address_type, is_active);
+CREATE INDEX idx_user_settings_user ON user_settings(user_id);
+CREATE INDEX idx_user_profiles_user ON user_profiles(user_id);
+
+-- Optimized view for product listings with category names
+CREATE OR REPLACE VIEW vw_products_with_category AS
+SELECT
+    p.product_id,
+    p.product_name,
+    p.description,
+    p.price,
+    p.stock_quantity,
+    p.image_url,
+    p.active,
+    p.created_at,
+    p.updated_at,
+    c.category_id,
+    c.category_name,
+    c.parent_category_id
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.category_id
+WHERE p.active = 1;
+
+-- Optimized view for order details with customer info
+CREATE OR REPLACE VIEW vw_order_details AS
+SELECT
+    o.order_id,
+    o.user_id,
+    u.full_name as customer_name,
+    u.email as customer_email,
+    o.status as order_status,
+    o.payment_status,
+    o.total_amount,
+    o.created_at,
+    o.updated_at,
+    COUNT(oi.order_item_id) as item_count
+FROM orders o
+INNER JOIN users u ON o.user_id = u.user_id
+LEFT JOIN order_items oi ON o.order_id = oi.order_id
+GROUP BY o.order_id, o.user_id, u.full_name, u.email, o.status,
+         o.payment_status, o.total_amount, o.created_at, o.updated_at;
+
+-- Optimized view for top-selling products
+CREATE OR REPLACE VIEW vw_top_products AS
+SELECT
+    p.product_id,
+    p.product_name,
+    p.price,
+    p.image_url,
+    c.category_name,
+    COALESCE(SUM(oi.quantity), 0) as total_sold,
+    COALESCE(SUM(oi.total_price), 0) as total_revenue,
+    COUNT(DISTINCT o.order_id) as order_count
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.category_id
+LEFT JOIN order_items oi ON p.product_id = oi.product_id
+LEFT JOIN orders o ON oi.order_id = o.order_id
+    AND o.status NOT IN ('cancelled', 'returned')
+WHERE p.active = 1
+GROUP BY p.product_id, p.product_name, p.price, p.image_url, c.category_name
+ORDER BY total_sold DESC;
+
+-- Stored procedure for paginated products
+DELIMITER //
+CREATE PROCEDURE sp_get_products_paginated(
+    IN p_page INT,
+    IN p_limit INT,
+    IN p_category_id INT,
+    IN p_search VARCHAR(255),
+    IN p_sort_by VARCHAR(50),
+    IN p_sort_order VARCHAR(10)
+)
+BEGIN
+    DECLARE v_offset INT;
+    SET v_offset = (p_page - 1) * p_limit;
+
+    SET @sql = CONCAT(
+        'SELECT SQL_CALC_FOUND_ROWS
+         p.product_id, p.product_name, p.price, p.stock_quantity,
+         p.image_url, p.active, p.created_at,
+         c.category_name,
+         COALESCE(AVG(r.rating), 0) as avg_rating,
+         COUNT(DISTINCT r.review_id) as review_count
+         FROM products p
+         LEFT JOIN categories c ON p.category_id = c.category_id
+         LEFT JOIN reviews r ON p.product_id = r.product_id
+         WHERE p.active = 1'
+    );
+
+    IF p_category_id IS NOT NULL AND p_category_id > 0 THEN
+        SET @sql = CONCAT(@sql, ' AND p.category_id = ', p_category_id);
+    END IF;
+
+    IF p_search IS NOT NULL AND p_search != '' THEN
+        SET @sql = CONCAT(@sql, ' AND (p.product_name LIKE ''%', p_search, '%'' OR p.description LIKE ''%', p_search, '%'')');
+    END IF;
+
+    SET @sql = CONCAT(@sql, ' GROUP BY p.product_id, p.product_name, p.price, p.stock_quantity, p.image_url, p.active, p.created_at, c.category_name');
+
+    IF p_sort_by IS NOT NULL AND p_sort_by != '' THEN
+        SET @sql = CONCAT(@sql, ' ORDER BY ', p_sort_by, ' ', p_sort_order);
+    ELSE
+        SET @sql = CONCAT(@sql, ' ORDER BY p.created_at DESC');
+    END IF;
+
+    SET @sql = CONCAT(@sql, ' LIMIT ', p_limit, ' OFFSET ', v_offset);
+
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+
+    SELECT FOUND_ROWS() as total_count;
+END //
+
+-- Stored procedure for user orders with items
+CREATE PROCEDURE sp_get_user_orders_with_items(
+    IN p_user_id INT,
+    IN p_page INT,
+    IN p_limit INT
+)
+BEGIN
+    DECLARE v_offset INT;
+    SET v_offset = (p_page - 1) * p_limit;
+
+    SELECT
+        o.order_id,
+        o.status as order_status,
+        o.payment_status,
+        o.total_amount,
+        o.created_at,
+        o.updated_at,
+        COUNT(oi.order_item_id) as item_count,
+        GROUP_CONCAT(
+            CONCAT(oi.product_id, ':', oi.quantity, ':', oi.unit_price)
+            ORDER BY oi.order_item_id
+            SEPARATOR '|'
+        ) as items_summary
+    FROM orders o
+    LEFT JOIN order_items oi ON o.order_id = oi.order_id
+    WHERE o.user_id = p_user_id
+    GROUP BY o.order_id, o.status, o.payment_status, o.total_amount,
+             o.created_at, o.updated_at
+    ORDER BY o.created_at DESC
+    LIMIT p_limit OFFSET v_offset;
+END //
+
+-- Procedure to optimize tables
+CREATE PROCEDURE sp_optimize_tables()
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE table_name VARCHAR(255);
+    DECLARE cur CURSOR FOR
+        SELECT TABLE_NAME
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = 'fashionstore'
+        AND TABLE_TYPE = 'BASE TABLE';
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+    OPEN cur;
+
+    read_loop: LOOP
+        FETCH cur INTO table_name;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+
+        SET @sql = CONCAT('OPTIMIZE TABLE ', table_name);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+
+        SET @sql = CONCAT('ANALYZE TABLE ', table_name);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+
+    END LOOP;
+
+    CLOSE cur;
+END //
+DELIMITER ;
+
+-- ============================================================
+-- 17. SEED DATA FOR NEW TABLES
+-- ============================================================
+
+-- Default user settings for existing users
+INSERT INTO user_settings (user_id, email_notifications, order_updates, language, currency, theme_preference)
+SELECT user_id, TRUE, TRUE, 'en', 'INR', 'auto'
+FROM users;
+
+-- Default user profiles for existing users
+INSERT INTO user_profiles (user_id)
+SELECT user_id
+FROM users;
+
+-- ============================================================
+-- 18. COMPLETION
 -- ============================================================
 
 SELECT 'FashionStore database schema created successfully!' AS status;

@@ -117,6 +117,26 @@ public class PaymentDAOImpl implements PaymentDAO {
     }
 
     @Override
+    public Payment getPaymentByStripePaymentIntentId(String stripePaymentIntentId) {
+        String sql = "SELECT * FROM payments WHERE stripe_payment_intent_id = ?";
+        
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            
+            ps.setString(1, stripePaymentIntentId);
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return extractPaymentFromResultSet(rs);
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("PaymentDAOImpl.getPaymentByStripePaymentIntentId Error: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
     public boolean updatePaymentStatus(int paymentId, String status) {
         String sql = "UPDATE payments SET status = ?, updated_at = NOW() WHERE payment_id = ?";
         
@@ -149,6 +169,43 @@ public class PaymentDAOImpl implements PaymentDAO {
             return result > 0;
         } catch (SQLException e) {
             logger.error("PaymentDAOImpl.updatePaymentVerification Error: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    @Override
+    public boolean updatePaymentFailureReason(int paymentId, String failureReason) {
+        String sql = "UPDATE payments SET gateway_response = ?, status = 'failed', updated_at = NOW() WHERE payment_id = ?";
+        
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            
+            ps.setString(1, failureReason);
+            ps.setInt(2, paymentId);
+            
+            int result = ps.executeUpdate();
+            return result > 0;
+        } catch (SQLException e) {
+            logger.error("PaymentDAOImpl.updatePaymentFailureReason Error: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    @Override
+    public boolean updateOrderPaymentStatus(int orderId, String paymentStatus, String transactionId) {
+        String sql = "UPDATE orders SET payment_status = ?, transaction_id = ?, updated_at = NOW() WHERE order_id = ?";
+        
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            
+            ps.setString(1, paymentStatus);
+            ps.setString(2, transactionId);
+            ps.setInt(3, orderId);
+            
+            int result = ps.executeUpdate();
+            return result > 0;
+        } catch (SQLException e) {
+            logger.error("PaymentDAOImpl.updateOrderPaymentStatus Error: {}", e.getMessage());
         }
         return false;
     }

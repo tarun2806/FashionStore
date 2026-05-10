@@ -61,7 +61,7 @@ public class SavedItemDAOImpl implements SavedItemDAO {
 
     @Override
     public List<SavedItem> getSavedItemsByUserId(int userId) {
-        String sql = "SELECT si.*, p.name as product_name, p.image_url, p.price " +
+        String sql = "SELECT si.*, p.product_name, p.image_url, p.price " +
                      "FROM saved_items si " +
                      "JOIN products p ON si.product_id = p.product_id " +
                      "WHERE si.user_id = ? ORDER BY si.saved_at DESC";

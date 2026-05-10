@@ -8,8 +8,11 @@ import com.fashionstore.model.CartItem;
 import com.fashionstore.model.Order;
 import com.fashionstore.model.Payment;
 import com.fashionstore.service.PaymentService;
+import com.fashionstore.service.StripePaymentService;
 import com.fashionstore.util.AuditLogger;
 import com.fashionstore.util.DBConnection;
+import com.stripe.exception.StripeException;
+import com.stripe.model.PaymentIntent;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -17,13 +20,16 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Payment controller for handling payment operations
@@ -34,11 +40,13 @@ public class PaymentController extends HttpServlet {
     
     private static final Logger logger = LoggerFactory.getLogger(PaymentController.class);
     private PaymentService paymentService;
+    private StripePaymentService stripePaymentService;
     private CartDAO cartDAO;
     
     @Override
     public void init() throws ServletException {
         paymentService = new PaymentService();
+        stripePaymentService = new StripePaymentService();
         cartDAO = new CartDAOImpl();
     }
     
@@ -50,6 +58,8 @@ public class PaymentController extends HttpServlet {
             handlePaymentSuccess(req, resp);
         } else if ("failure".equals(action)) {
             handlePaymentFailure(req, resp);
+        } else if ("stripe-webhook".equals(action)) {
+            handleStripeWebhook(req, resp);
         } else if ("webhook".equals(action)) {
             handleWebhook(req, resp);
         } else {
@@ -65,6 +75,8 @@ public class PaymentController extends HttpServlet {
             initiatePayment(req, resp);
         } else if ("verify".equals(action)) {
             verifyPayment(req, resp);
+        } else if ("stripe-webhook".equals(action)) {
+            handleStripeWebhook(req, resp);
         } else if ("webhook".equals(action)) {
             handleWebhook(req, resp);
         } else {
@@ -123,11 +135,45 @@ public class PaymentController extends HttpServlet {
                 resp.setContentType("application/json");
                 resp.getWriter().write("{\"razorpayOrderId\":\"" + razorpayOrderId + "\",\"amount\":" + (int)(total * 100) + ",\"orderId\":" + orderId + "}");
             } else if ("STRIPE".equals(paymentMethod)) {
-                String stripePaymentIntentId = "pi_" + System.currentTimeMillis();
-                paymentService.processStripePayment(orderId, BigDecimal.valueOf(total), stripePaymentIntentId, req);
-                // Return Stripe payment intent ID to frontend
-                resp.setContentType("application/json");
-                resp.getWriter().write("{\"paymentIntentId\":\"" + stripePaymentIntentId + "\",\"amount\":" + (int)(total * 100) + ",\"orderId\":" + orderId + "}");
+                // Create real Stripe Payment Intent
+                try {
+                    if (!stripePaymentService.isConfigured()) {
+                        resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Stripe is not configured");
+                        return;
+                    }
+                    
+                    // Get user email from session
+                    String email = (String) session.getAttribute("email");
+                    String name = (String) session.getAttribute("fullName");
+                    
+                    // Create metadata for the payment
+                    Map<String, String> metadata = new HashMap<>();
+                    metadata.put("order_id", String.valueOf(orderId));
+                    metadata.put("user_id", String.valueOf(userId));
+                    
+                    // Create Stripe Payment Intent
+                    PaymentIntent paymentIntent = stripePaymentService.createPaymentIntent(
+                        BigDecimal.valueOf(total),
+                        "INR",
+                        email,
+                        name,
+                        "FashionStore Order #" + orderId,
+                        metadata,
+                        req
+                    );
+                    
+                    // Create payment record with Stripe payment intent ID
+                    paymentService.processStripePayment(orderId, BigDecimal.valueOf(total), paymentIntent.getId(), req);
+                    
+                    // Return Stripe client secret to frontend
+                    resp.setContentType("application/json");
+                    resp.getWriter().write("{\"clientSecret\":\"" + paymentIntent.getClientSecret() + "\",\"paymentIntentId\":\"" + paymentIntent.getId() + "\",\"amount\":" + (int)(total * 100) + ",\"orderId\":" + orderId + "}");
+                    
+                } catch (StripeException e) {
+                    logger.error("Stripe error in PaymentController.initiatePayment: {}", e.getMessage(), e);
+                    resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error creating Stripe payment intent");
+                    return;
+                }
             } else {
                 resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid payment method");
             }
@@ -236,8 +282,10 @@ public class PaymentController extends HttpServlet {
         // Read webhook payload
         StringBuilder buffer = new StringBuilder();
         String line;
-        while ((line = req.getReader().readLine()) != null) {
-            buffer.append(line);
+        try (BufferedReader reader = req.getReader()) {
+            while ((line = reader.readLine()) != null) {
+                buffer.append(line);
+            }
         }
         
         String payload = buffer.toString();
@@ -259,6 +307,61 @@ public class PaymentController extends HttpServlet {
             resp.setStatus(HttpServletResponse.SC_OK);
             
         } catch (Exception e) {
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    /**
+     * Handle Stripe webhook with signature verification
+     */
+    private void handleStripeWebhook(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        // Read webhook payload
+        StringBuilder buffer = new StringBuilder();
+        String line;
+        try (BufferedReader reader = req.getReader()) {
+            while ((line = reader.readLine()) != null) {
+                buffer.append(line);
+            }
+        }
+        
+        String payload = buffer.toString();
+        String signatureHeader = req.getHeader("Stripe-Signature");
+        
+        try {
+            // Verify webhook signature
+            boolean isValid = stripePaymentService.verifyWebhookSignature(payload, signatureHeader, req);
+            
+            if (!isValid) {
+                logger.warn("Invalid Stripe webhook signature");
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+            
+            // Parse webhook event
+            com.stripe.model.Event event = stripePaymentService.parseWebhookEvent(payload);
+            
+            // Handle different event types
+            String eventType = event.getType();
+            
+            switch (eventType) {
+                case "payment_intent.succeeded":
+                    stripePaymentService.handlePaymentSucceeded(event, req);
+                    break;
+                case "payment_intent.payment_failed":
+                    stripePaymentService.handlePaymentFailed(event, req);
+                    break;
+                case "charge.refunded":
+                    // Handle refund if needed
+                    logger.info("Stripe refund received: {}", event.getId());
+                    break;
+                default:
+                    logger.info("Unhandled Stripe webhook event type: {}", eventType);
+            }
+            
+            resp.setStatus(HttpServletResponse.SC_OK);
+            
+        } catch (Exception e) {
+            logger.error("Error handling Stripe webhook: {}", e.getMessage(), e);
             resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }

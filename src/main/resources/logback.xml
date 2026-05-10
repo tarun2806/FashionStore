@@ -24,6 +24,7 @@
                 <timestampFormat>yyyy-MM-dd HH:mm:ss.SSS</timestampFormat>
                 <timestampPattern>timestamp</timestampPattern>
                 <appendLineSeparator>true</appendLineSeparator>
+                <includeMDC>true</includeMDC>
             </layout>
         </encoder>
     </appender>

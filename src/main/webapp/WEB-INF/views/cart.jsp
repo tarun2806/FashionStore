@@ -264,7 +264,5 @@
 <!-- FOOTER -->
 <jsp:include page="/WEB-INF/views/partials/footer.jsp" />
 
-<script src="<%= request.getContextPath() %>/assets/js/cart.js"></script>
-
 </body>
 </html>

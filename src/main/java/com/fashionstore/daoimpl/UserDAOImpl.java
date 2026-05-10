@@ -34,7 +34,7 @@ public class UserDAOImpl implements UserDAO {
 
     @Override
     public int registerUser(User user) {
-        String sql = "INSERT INTO users (full_name, email, phone, password, gender, address) VALUES (?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO users (full_name, email, phone, password, gender, address, role) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection con = DBConnection.getConnection();
              PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -42,13 +42,19 @@ public class UserDAOImpl implements UserDAO {
             ps.setString(1, user.getFullName());
             ps.setString(2, user.getEmail());
             ps.setString(3, user.getPhone());
-            
+
             // ✅ Architecture Upgrade: Hash password before saving
             String hashedPassword = BCrypt.hashpw(user.getPassword(), BCrypt.gensalt());
             ps.setString(4, hashedPassword);
-            
+
             ps.setString(5, user.getGender());
             ps.setString(6, user.getAddress());
+
+            String role = user.getRole();
+            if (role == null || role.isBlank()) {
+                role = "customer";
+            }
+            ps.setString(7, role);
 
             int rows = ps.executeUpdate();
 

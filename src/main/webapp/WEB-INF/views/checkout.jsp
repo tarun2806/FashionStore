@@ -13,6 +13,8 @@
     request.setAttribute("_pageCSS", "checkout");
 %>
 <jsp:include page="/WEB-INF/views/partials/head.jsp" />
+<!-- Stripe.js -->
+<script src="https://js.stripe.com/v3/"></script>
 </head>
 
 <body>
@@ -229,20 +231,29 @@
                                 </div>
                             </label>
                             <label class="payment-card">
-                                <input type="radio" name="paymentMethod" value="CARD">
+                                <input type="radio" name="paymentMethod" value="STRIPE">
                                 <div class="payment-info">
                                     <span class="payment-name">Credit / Debit Card</span>
-                                    <span class="payment-desc">Secure online payment via Razorpay</span>
+                                    <span class="payment-desc">Secure online payment via Stripe</span>
                                 </div>
                             </label>
                             <label class="payment-card">
-                                <input type="radio" name="paymentMethod" value="UPI">
+                                <input type="radio" name="paymentMethod" value="RAZORPAY">
                                 <div class="payment-info">
-                                    <span class="payment-name">UPI Payment</span>
+                                    <span class="payment-name">UPI / Net Banking</span>
                                     <span class="payment-desc">Pay using Google Pay, PhonePe, or Paytm</span>
                                 </div>
                             </label>
                         </div>
+                        
+                        <!-- Stripe Payment Element Container -->
+                        <div id="stripe-payment-element-container" style="display: none; margin: 20px 0;">
+                            <div id="stripe-card-element">
+                                <!-- Stripe Elements will be mounted here -->
+                            </div>
+                            <div id="stripe-payment-errors" class="checkout-form-error"></div>
+                        </div>
+                        
                         <button type="button" class="place-order-btn secondary" onclick="FashionStore.goToCheckoutStep(1)">
                             Back
                         </button>
@@ -364,6 +375,7 @@ document.getElementById('checkoutForm').addEventListener('submit', function(e) {
     const form = this;
     const errorEl = document.getElementById('form-error');
     const selectedAddress = document.querySelector('input[name="shippingAddressId"]:checked');
+    const selectedPaymentMethod = document.querySelector('input[name="paymentMethod"]:checked');
 
     const usingNew = !selectedAddress || selectedAddress.value === '' || selectedAddress.value === 'new';
 
@@ -398,6 +410,156 @@ document.getElementById('checkoutForm').addEventListener('submit', function(e) {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Processing...';
 });
+
+// Stripe payment handling
+let stripe;
+let elements;
+let cardElement;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle payment method selection
+    const paymentMethodRadios = document.querySelectorAll('input[name="paymentMethod"]');
+    const stripeContainer = document.getElementById('stripe-payment-element-container');
+    
+    paymentMethodRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'STRIPE') {
+                stripeContainer.style.display = 'block';
+                initStripeElements();
+            } else {
+                stripeContainer.style.display = 'none';
+            }
+        });
+    });
+});
+
+function initStripeElements() {
+    if (stripe) return; // Already initialized
+    
+    // Initialize Stripe with publishable key (should be passed from server)
+    const stripePublishableKey = 'pk_test_your_stripe_publishable_key'; // Replace with actual key from server
+    stripe = Stripe(stripePublishableKey);
+    
+    const elements = stripe.elements({
+        appearance: {
+            theme: 'stripe',
+            variables: {
+                colorPrimary: '#101010',
+                colorBackground: '#ffffff',
+                colorText: '#101010',
+            }
+        }
+    });
+    
+    cardElement = elements.create('card', {
+        style: {
+            base: {
+                fontSize: '16px',
+                color: '#101010',
+                '::placeholder': {
+                    color: '#888888',
+                },
+            },
+            invalid: {
+                color: '#fa755a',
+                iconColor: '#fa755a',
+            },
+        },
+    });
+    
+    cardElement.mount('#stripe-card-element');
+    
+    // Handle real-time validation errors
+    cardElement.on('change', function(event) {
+        const errorElement = document.getElementById('stripe-payment-errors');
+        if (event.error) {
+            errorElement.textContent = event.error.message;
+            errorElement.classList.add('is-visible');
+        } else {
+            errorElement.textContent = '';
+            errorElement.classList.remove('is-visible');
+        }
+    });
+}
+
+// Override the review order function to handle Stripe payment
+window.FashionStore = window.FashionStore || {};
+const originalReviewOrder = window.FashionStore.reviewOrder;
+
+window.FashionStore.reviewOrder = function() {
+    const selectedPaymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+    
+    if (selectedPaymentMethod === 'STRIPE') {
+        initiateStripePayment();
+    } else {
+        if (originalReviewOrder) {
+            originalReviewOrder();
+        } else {
+            FashionStore.goToCheckoutStep(3);
+        }
+    }
+};
+
+async function initiateStripePayment() {
+    const form = document.getElementById('checkoutForm');
+    const btn = document.querySelector('#step2 .place-order-btn:last-of-type');
+    const errorEl = document.getElementById('form-error');
+    
+    try {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Processing...';
+        
+        // Collect form data
+        const formData = new FormData(form);
+        formData.append('action', 'initiate');
+        formData.append('paymentMethod', 'STRIPE');
+        
+        const response = await fetch('<%= request.getContextPath() %>/payment', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.clientSecret) {
+            throw new Error(data.error || 'Failed to create payment intent');
+        }
+        
+        // Confirm the payment with Stripe
+        const { error, paymentIntent } = await stripe.confirmCardPayment(data.clientSecret, {
+            payment_method: {
+                card: cardElement,
+                billing_details: {
+                    name: formData.get('fullName'),
+                    email: '<%= session.getAttribute("email") %>',
+                    phone: formData.get('phone'),
+                    address: {
+                        line1: formData.get('address'),
+                        city: formData.get('city'),
+                        state: formData.get('state'),
+                        postal_code: formData.get('zip'),
+                    }
+                }
+            }
+        });
+        
+        if (error) {
+            throw new Error(error.message);
+        }
+        
+        // Payment successful, redirect to success page
+        window.location.href = '<%= request.getContextPath() %>/payment?action=success&orderId=' + data.orderId;
+        
+    } catch (err) {
+        console.error('Stripe payment error:', err);
+        if (errorEl) {
+            errorEl.textContent = err.message || 'Payment failed. Please try again.';
+            errorEl.classList.add('is-visible');
+        }
+        btn.disabled = false;
+        btn.innerHTML = 'Review Order';
+    }
+}
 </script>
 
 </body>

@@ -40,6 +40,10 @@
             New to FashionStore?
             <a href="<%= request.getContextPath() %>/register">Create account</a>
         </p>
+        <p class="auth-links" style="margin-top: 0.5rem;">
+            Need an admin account?
+            <a href="<%= request.getContextPath() %>/admin/register">Register as admin</a>
+        </p>
     </section>
 </main>
 

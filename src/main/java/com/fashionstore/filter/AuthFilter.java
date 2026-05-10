@@ -38,11 +38,14 @@ public class AuthFilter implements Filter {
             "/search",
             "/success",
             "/payment",
-            "/index.jsp"
+            "/index.jsp",
+            "/admin/register"
     );
 
     private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
-            "/assets/"
+            "/assets/",
+            "/api/admin/login",
+            "/api/admin/register"
     );
 
     /** Admin JSON API: handles its own auth + role check via AdminApiController. */

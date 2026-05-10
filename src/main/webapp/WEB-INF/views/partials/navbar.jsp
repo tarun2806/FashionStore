@@ -219,27 +219,35 @@
     <div id="mini-cart-drawer" class="mini-cart-drawer">
         <div class="mini-cart-header">
             <h3>Your Cart</h3>
-            <button class="close-cart-btn" onclick="toggleMiniCart(event)" aria-label="Close cart">×</button>
+            <button class="close-cart-btn" onclick="toggleMiniCart(event)" aria-label="Close cart">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
         </div>
         <div class="mini-cart-items" id="mini-cart-items">
             <!-- Items injected here by JS -->
         </div>
         <div class="mini-cart-footer">
-            <div class="mini-cart-total">
-                <span>Total:</span>
-                <span id="mini-cart-total-price">₹0.00</span>
+            <div class="mini-cart-subtotal">
+                <span class="mini-cart-subtotal-label">Subtotal</span>
+                <span class="mini-cart-subtotal-value" id="mini-cart-total-price">₹0.00</span>
             </div>
-            <a href="<%= request.getContextPath() %>/cart" class="btn btn-secondary btn-block">View Cart</a>
-            <a href="<%= request.getContextPath() %>/checkout" class="btn btn-primary btn-block">Checkout</a>
+            <div class="mini-cart-actions">
+                <a href="<%= request.getContextPath() %>/checkout" class="btn btn-primary">
+                    Checkout
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                </a>
+                <a href="<%= request.getContextPath() %>/cart" class="btn btn-secondary">View Cart</a>
+            </div>
         </div>
     </div>
 
     <script>
-        const contextPath = '<%= request.getContextPath() %>';
-        const csrfToken = '<%= request.getAttribute("csrfToken") != null ? org.apache.commons.text.StringEscapeUtils.escapeEcmaScript(request.getAttribute("csrfToken").toString()) : "" %>';
-        window.contextPath = contextPath;
-        window.csrfToken = csrfToken;
-        
         // Commerce navigation
         const mobileMenuBtn = document.getElementById('mobile-menu-btn');
         const navActions = document.getElementById('nav-actions');
