@@ -196,20 +196,14 @@ public class CheckoutServiceImpl implements CheckoutService {
             // Create order
             Order order = new Order();
             order.setUserId(userId);
-            // order.setFullName(shippingAddress.getFullName());
-            // order.setAddress(shippingAddress.getAddress());
+            order.setFullName(shippingAddress.getFullName());
+            order.setAddress(shippingAddress.getAddressLine1() + " " + shippingAddress.getAddressLine2());
             order.setCity(shippingAddress.getCity());
             order.setState(shippingAddress.getState());
-            // order.setZip(shippingAddress.getZip());
+            order.setZip(shippingAddress.getPostalCode());
             order.setPhone(shippingAddress.getPhone());
             order.setTotalAmount(totals.get("total"));
-            // order.setSubtotal(totals.get("subtotal"));
-            // order.setTaxAmount(totals.get("tax"));
-            // order.setShippingAmount(totals.get("shipping"));
-            // order.setDiscountAmount(totals.get("discount"));
-            // order.setCouponCode(couponCode);
             order.setStatus("Pending");
-            // order.setPaymentStatus("pending");
             order.setOrderDate(new java.sql.Timestamp(System.currentTimeMillis()));
 
             return order;

@@ -497,11 +497,6 @@ public class OrderServiceImpl implements OrderService {
         order.setPhone(String.valueOf(orderData.getOrDefault("phone", "")));
         order.setPaymentMethod(String.valueOf(orderData.getOrDefault("paymentMethod", "COD")));
         order.setTotalAmount(((Number) orderData.getOrDefault("totalAmount", 0)).doubleValue());
-        // order.setSubtotal(((Number) orderData.getOrDefault("subtotal", 0)).doubleValue());
-        // order.setTaxAmount(((Number) orderData.getOrDefault("taxAmount", 0)).doubleValue());
-        // order.setShippingAmount(((Number) orderData.getOrDefault("shippingAmount", 0)).doubleValue());
-        // order.setDiscountAmount(((Number) orderData.getOrDefault("discountAmount", 0)).doubleValue());
-        // order.setCouponCode(String.valueOf(orderData.getOrDefault("couponCode", "")));
         return order;
     }
 

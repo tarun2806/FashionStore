@@ -3,9 +3,13 @@ package com.fashionstore.controller;
 import com.fashionstore.dto.PaymentDTO;
 import com.fashionstore.model.User;
 import com.fashionstore.security.CSRFProtection;
+import com.fashionstore.service.CartService;
 import com.fashionstore.service.CheckoutService;
 import com.fashionstore.service.DeliveryEstimationService;
-import com.fashionstore.util.JsonUtil;
+import com.fashionstore.service.OrderService;
+import com.fashionstore.serviceimpl.CartServiceImpl;
+import com.fashionstore.serviceimpl.CheckoutServiceImpl;
+import com.fashionstore.serviceimpl.OrderServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -32,13 +36,16 @@ public class CheckoutControllerV2 extends HttpServlet {
     private static final Logger logger = LoggerFactory.getLogger(CheckoutControllerV2.class);
     private CheckoutService checkoutService;
     private DeliveryEstimationService deliveryService;
+    private CartService cartService;
+    private OrderService orderService;
     private ObjectMapper objectMapper;
 
     @Override
     public void init() {
-        // checkoutService = new CheckoutService();
-        // CheckoutService is abstract and cannot be instantiated, commenting out for now
+        checkoutService = new CheckoutServiceImpl();
         deliveryService = new DeliveryEstimationService();
+        cartService = new CartServiceImpl();
+        orderService = new OrderServiceImpl();
         objectMapper = new ObjectMapper();
     }
 
@@ -142,35 +149,65 @@ public class CheckoutControllerV2 extends HttpServlet {
             return;
         }
 
-        // Pass Stripe publishable key to JSP
-        String stripePublishableKey = System.getenv("STRIPE_PUBLISHABLE_KEY");
-        request.setAttribute("stripePublishableKey", stripePublishableKey);
+        int userId = user.getUserId();
 
-        // Generate unique checkout session ID
-        String checkoutSessionId = UUID.randomUUID().toString();
-        request.getSession().setAttribute("checkoutSessionId", checkoutSessionId);
+        try {
+            // Validate cart
+            List<com.fashionstore.model.CartItem> cartItems = cartService.getCartItems(userId);
+            if (cartItems == null || cartItems.isEmpty()) {
+                sendErrorResponse(response, "Your cart is empty", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
 
-        // Initialize checkout data
-        // Placeholder implementation - checkout service method not available
-        Map<String, Object> checkout = new HashMap<>();
-        checkout.put("checkoutSessionId", checkoutSessionId);
-        
-        // Placeholder implementation - checkout service method not available
-        Map<String, Object> cartValidation = new HashMap<>();
-        cartValidation.put("valid", false);
-        cartValidation.put("message", "Cart validation not implemented");
-        if (!(Boolean) cartValidation.get("valid")) {
-            sendErrorResponse(response, (String) cartValidation.get("message"), HttpServletResponse.SC_BAD_REQUEST);
-            return;
+            // Validate cart for checkout
+            if (!cartService.validateCartForCheckout(userId)) {
+                sendErrorResponse(response, "Some items in your cart are not available", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Generate unique checkout session ID with duplicate prevention
+            String checkoutSessionId = UUID.randomUUID().toString();
+            
+            // Check for existing active checkout session to prevent duplicate checkout
+            String existingSessionId = (String) request.getSession().getAttribute("checkoutSessionId");
+            if (existingSessionId != null) {
+                // Reuse existing session if still valid
+                checkoutSessionId = existingSessionId;
+            }
+            
+            request.getSession().setAttribute("checkoutSessionId", checkoutSessionId);
+            request.getSession().setAttribute("checkoutStartTime", System.currentTimeMillis());
+
+            // Calculate totals
+            Map<String, Double> totals = checkoutService.calculateCheckoutTotals(userId, null);
+
+            // Get user addresses
+            List<com.fashionstore.model.Address> addresses = checkoutService.getUserCheckoutAddresses(userId);
+            com.fashionstore.model.Address defaultAddress = checkoutService.getDefaultShippingAddress(userId);
+
+            // Initialize checkout data
+            Map<String, Object> checkout = new HashMap<>();
+            checkout.put("checkoutSessionId", checkoutSessionId);
+            checkout.put("cartItems", cartItems);
+            checkout.put("totals", totals);
+            checkout.put("addresses", addresses);
+            checkout.put("defaultAddress", defaultAddress);
+
+            Map<String, Object> cartValidation = new HashMap<>();
+            cartValidation.put("valid", true);
+            cartValidation.put("message", "Cart validated successfully");
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", true);
+            data.put("checkout", checkout);
+            data.put("checkoutSessionId", checkoutSessionId);
+            data.put("cartValidation", cartValidation);
+
+            sendJsonResponse(response, data);
+        } catch (Exception e) {
+            logger.error("Error initializing checkout for user {}: {}", userId, e.getMessage(), e);
+            sendErrorResponse(response, "Failed to initialize checkout", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("success", true);
-        data.put("checkout", checkout);
-        data.put("checkoutSessionId", checkoutSessionId);
-        data.put("cartValidation", cartValidation);
-        
-        sendJsonResponse(response, data);
     }
 
     private void validateCheckout(HttpServletRequest request, HttpServletResponse response, User user) 
@@ -182,24 +219,28 @@ public class CheckoutControllerV2 extends HttpServlet {
             return;
         }
 
-        // Placeholder implementation - checkout service method not available
-        Map<String, Object> checkout = new HashMap<>();
-        checkout.put("checkoutSessionId", checkoutSessionId);
-        if (checkout == null) {
-            sendErrorResponse(response, "Checkout session not found", HttpServletResponse.SC_BAD_REQUEST);
-            return;
-        }
+        int userId = user.getUserId();
 
-        // Placeholder implementation - checkout service method not available
-        Map<String, Object> validation = new HashMap<>();
-        validation.put("valid", false);
-        validation.put("message", "Checkout validation not implemented");
-        
-        Map<String, Object> data = new HashMap<>();
-        data.put("success", true);
-        data.put("validation", validation);
-        
-        sendJsonResponse(response, data);
+        try {
+            // Validate cart
+            if (!cartService.validateCartForCheckout(userId)) {
+                sendErrorResponse(response, "Some items in your cart are not available", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            Map<String, Object> validation = new HashMap<>();
+            validation.put("valid", true);
+            validation.put("message", "Checkout data validated successfully");
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", true);
+            data.put("validation", validation);
+
+            sendJsonResponse(response, data);
+        } catch (Exception e) {
+            logger.error("Error validating checkout for user {}: {}", userId, e.getMessage(), e);
+            sendErrorResponse(response, "Failed to validate checkout", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
     }
 
     private void getDeliverySlots(HttpServletRequest request, HttpServletResponse response, User user) 
@@ -260,22 +301,41 @@ public class CheckoutControllerV2 extends HttpServlet {
             return;
         }
 
-        // Placeholder implementation - checkout service method not available
-        Map<String, Object> checkout = new HashMap<>();
-        checkout.put("checkoutSessionId", checkoutSessionId);
-        if (checkout == null) {
-            sendErrorResponse(response, "Checkout session not found", HttpServletResponse.SC_BAD_REQUEST);
-            return;
-        }
+        int userId = user.getUserId();
+        String couponCode = request.getParameter("couponCode");
 
-        // Placeholder implementation - checkout service method not available
-        Map<String, Object> orderSummary = new HashMap<>();
-        
-        Map<String, Object> data = new HashMap<>();
-        data.put("success", true);
-        data.put("orderSummary", orderSummary);
-        
-        sendJsonResponse(response, data);
+        try {
+            // Get cart items
+            List<com.fashionstore.model.CartItem> cartItems = cartService.getCartItems(userId);
+            if (cartItems == null || cartItems.isEmpty()) {
+                sendErrorResponse(response, "Your cart is empty", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Calculate totals with coupon
+            Map<String, Double> totals = checkoutService.calculateCheckoutTotals(userId, couponCode);
+
+            // Get addresses
+            List<com.fashionstore.model.Address> addresses = checkoutService.getUserCheckoutAddresses(userId);
+            com.fashionstore.model.Address defaultAddress = checkoutService.getDefaultShippingAddress(userId);
+
+            Map<String, Object> orderSummary = new HashMap<>();
+            orderSummary.put("cartItems", cartItems);
+            orderSummary.put("totals", totals);
+            orderSummary.put("addresses", addresses);
+            orderSummary.put("defaultAddress", defaultAddress);
+            orderSummary.put("couponCode", couponCode);
+            orderSummary.put("checkoutSessionId", checkoutSessionId);
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", true);
+            data.put("orderSummary", orderSummary);
+
+            sendJsonResponse(response, data);
+        } catch (Exception e) {
+            logger.error("Error getting order summary for user {}: {}", userId, e.getMessage(), e);
+            sendErrorResponse(response, "Failed to get order summary", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
     }
 
     private void getAddressSelection(HttpServletRequest request, HttpServletResponse response, User user) 
@@ -332,6 +392,7 @@ public class CheckoutControllerV2 extends HttpServlet {
             return;
         }
 
+        int userId = user.getUserId();
         String checkoutSessionId = (String) request.getSession().getAttribute("checkoutSessionId");
         if (checkoutSessionId == null) {
             sendErrorResponse(response, "Checkout session expired", HttpServletResponse.SC_BAD_REQUEST);
@@ -339,44 +400,178 @@ public class CheckoutControllerV2 extends HttpServlet {
         }
 
         try {
-            Map<String, Object> checkout = objectMapper.readValue(request.getReader(), Map.class);
-            checkout.put("checkoutSessionId", checkoutSessionId);
-            checkout.put("userId", user.getUserId());
+            // Parse checkout data
+            Map<String, Object> checkoutData = objectMapper.readValue(request.getReader(), Map.class);
             
-            // Validate checkout
-            // Placeholder implementation - checkout service method not available
-            Map<String, Object> validation = new HashMap<>();
-        validation.put("valid", false);
-        validation.put("message", "Checkout validation not implemented");
-            if (!(Boolean) validation.get("valid")) {
-                sendErrorResponse(response, (String) validation.get("message"), HttpServletResponse.SC_BAD_REQUEST);
+            // Idempotency protection - check for duplicate submission
+            String idempotencyKey = request.getHeader("X-Idempotency-Key");
+            if (idempotencyKey != null && !idempotencyKey.trim().isEmpty()) {
+                String processedKey = (String) request.getSession().getAttribute("processed_" + idempotencyKey);
+                if (processedKey != null) {
+                    // Return the previously created order
+                    Integer previousOrderId = (Integer) request.getSession().getAttribute("orderId_" + idempotencyKey);
+                    if (previousOrderId != null) {
+                        com.fashionstore.model.Order previousOrder = orderService.getOrderById(previousOrderId, userId);
+                        if (previousOrder != null) {
+                            Map<String, Object> data = new HashMap<>();
+                            data.put("success", true);
+                            data.put("orderId", previousOrder.getOrderId());
+                            data.put("order", previousOrder);
+                            data.put("message", "Order already processed (duplicate submission prevented)");
+                            sendJsonResponse(response, data);
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            // Extract required fields
+            String paymentMethod = (String) checkoutData.get("paymentMethod");
+            if (paymentMethod == null || paymentMethod.trim().isEmpty()) {
+                sendErrorResponse(response, "Payment method is required", HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
 
-            // Process order with idempotency protection
-            String idempotencyKey = request.getHeader("X-Idempotency-Key");
-            // Placeholder implementation - checkout service method not available
-            Map<String, Object> orderResult = new HashMap<>();
-        orderResult.put("success", false);
-        orderResult.put("message", "Process order not implemented");
-            
-            if ((Boolean) orderResult.get("success")) {
-                // Clear checkout session
-                request.getSession().removeAttribute("checkoutSessionId");
-                
-                Map<String, Object> data = new HashMap<>();
-                data.put("success", true);
-                data.put("order", orderResult.get("order"));
-                data.put("payment", orderResult.get("payment"));
-                data.put("message", "Order placed successfully");
-                
-                sendJsonResponse(response, data);
-            } else {
-                sendErrorResponse(response, (String) orderResult.get("message"), HttpServletResponse.SC_BAD_REQUEST);
+            // Get shipping address
+            Map<String, Object> shippingAddressData = (Map<String, Object>) checkoutData.get("shippingAddress");
+            if (shippingAddressData == null) {
+                sendErrorResponse(response, "Shipping address is required", HttpServletResponse.SC_BAD_REQUEST);
+                return;
             }
+
+            // Validate shipping address fields
+            if (shippingAddressData.get("fullName") == null || ((String) shippingAddressData.get("fullName")).trim().isEmpty()) {
+                sendErrorResponse(response, "Full name is required", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+            if (shippingAddressData.get("addressLine1") == null || ((String) shippingAddressData.get("addressLine1")).trim().isEmpty()) {
+                sendErrorResponse(response, "Address line 1 is required", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+            if (shippingAddressData.get("city") == null || ((String) shippingAddressData.get("city")).trim().isEmpty()) {
+                sendErrorResponse(response, "City is required", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+            if (shippingAddressData.get("state") == null || ((String) shippingAddressData.get("state")).trim().isEmpty()) {
+                sendErrorResponse(response, "State is required", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+            if (shippingAddressData.get("postalCode") == null || ((String) shippingAddressData.get("postalCode")).trim().isEmpty()) {
+                sendErrorResponse(response, "Postal code is required", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+            if (shippingAddressData.get("phone") == null || ((String) shippingAddressData.get("phone")).trim().isEmpty()) {
+                sendErrorResponse(response, "Phone number is required", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Get cart items
+            List<com.fashionstore.model.CartItem> cartItems = cartService.getCartItems(userId);
+            if (cartItems == null || cartItems.isEmpty()) {
+                sendErrorResponse(response, "Your cart is empty", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Validate cart for checkout
+            if (!cartService.validateCartForCheckout(userId)) {
+                sendErrorResponse(response, "Some items in your cart are not available", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Validate stock availability before order creation
+            com.fashionstore.service.InventoryService inventoryService = new com.fashionstore.serviceimpl.InventoryServiceImpl();
+            for (com.fashionstore.model.CartItem item : cartItems) {
+                if (!inventoryService.isProductAvailable(item.getProductId(), item.getSizeLabel(), item.getQuantity())) {
+                    sendErrorResponse(response, "Insufficient stock for: " + item.getProductName(), HttpServletResponse.SC_BAD_REQUEST);
+                    return;
+                }
+            }
+
+            // Calculate totals
+            String couponCode = (String) checkoutData.get("couponCode");
+            Map<String, Double> totals = checkoutService.calculateCheckoutTotals(userId, couponCode);
+
+            // Reserve stock atomically
+            List<com.fashionstore.model.ProductSize> productSizes = new ArrayList<>();
+            for (com.fashionstore.model.CartItem item : cartItems) {
+                com.fashionstore.model.ProductSize ps = new com.fashionstore.model.ProductSize();
+                ps.setProductId(item.getProductId());
+                ps.setSizeLabel(item.getSizeLabel());
+                ps.setStockQuantity(item.getQuantity());
+                productSizes.add(ps);
+            }
+
+            // Reserve stock with rollback capability
+            if (!inventoryService.validateStockForOrder(productSizes)) {
+                sendErrorResponse(response, "Stock validation failed", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Deduct stock
+            boolean stockDeducted = inventoryService.processInventoryAfterOrder(productSizes);
+            if (!stockDeducted) {
+                sendErrorResponse(response, "Failed to deduct stock", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                return;
+            }
+
+            // Prepare order data
+            Map<String, Object> orderData = new HashMap<>();
+            orderData.put("userId", userId);
+            orderData.put("fullName", shippingAddressData.get("fullName"));
+            orderData.put("address", shippingAddressData.get("addressLine1") + " " + shippingAddressData.get("addressLine2"));
+            orderData.put("city", shippingAddressData.get("city"));
+            orderData.put("state", shippingAddressData.get("state"));
+            orderData.put("zip", shippingAddressData.get("postalCode"));
+            orderData.put("phone", shippingAddressData.get("phone"));
+            orderData.put("paymentMethod", paymentMethod);
+            orderData.put("totalAmount", totals.get("total"));
+
+            // Prepare order items
+            List<Map<String, Object>> itemsData = new ArrayList<>();
+            for (com.fashionstore.model.CartItem item : cartItems) {
+                Map<String, Object> itemData = new HashMap<>();
+                itemData.put("productId", item.getProductId());
+                itemData.put("quantity", item.getQuantity());
+                itemData.put("price", item.getPrice());
+                itemData.put("sizeLabel", item.getSizeLabel());
+                itemsData.add(itemData);
+            }
+            orderData.put("items", itemsData);
+
+            // Create order
+            com.fashionstore.model.Order order = orderService.createOrder(userId, orderData);
+            if (order == null) {
+                // Rollback stock if order creation fails
+                for (com.fashionstore.model.CartItem item : cartItems) {
+                    inventoryService.releaseReservedStock(item.getProductId(), item.getSizeLabel(), item.getQuantity());
+                }
+                sendErrorResponse(response, "Failed to create order", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                return;
+            }
+
+            // Clear cart after successful order creation
+            com.fashionstore.dao.CartDAO cartDAO = new com.fashionstore.daoimpl.CartDAOImpl();
+            cartDAO.clearCartByUserId(userId);
+
+            // Clear checkout session
+            request.getSession().removeAttribute("checkoutSessionId");
+
+            // Store idempotency key to prevent duplicate submissions
+            if (idempotencyKey != null && !idempotencyKey.trim().isEmpty()) {
+                request.getSession().setAttribute("processed_" + idempotencyKey, idempotencyKey);
+                request.getSession().setAttribute("orderId_" + idempotencyKey, order.getOrderId());
+            }
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", true);
+            data.put("orderId", order.getOrderId());
+            data.put("order", order);
+            data.put("message", "Order placed successfully");
+
+            sendJsonResponse(response, data);
         } catch (Exception e) {
-            logger.error("Error parsing checkout data: {}", e.getMessage(), e);
-            sendErrorResponse(response, "Invalid checkout data", HttpServletResponse.SC_BAD_REQUEST);
+            logger.error("Error submitting order for user {}: {}", userId, e.getMessage(), e);
+            sendErrorResponse(response, "Failed to submit order", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -492,12 +687,12 @@ public class CheckoutControllerV2 extends HttpServlet {
     private void applyCoupon(HttpServletRequest request, HttpServletResponse response, User user) 
             throws IOException {
         
-        String checkoutSessionId = (String) request.getSession().getAttribute("checkoutSessionId");
-        if (checkoutSessionId == null) {
-            sendErrorResponse(response, "Checkout session expired", HttpServletResponse.SC_BAD_REQUEST);
+        if (user == null) {
+            sendErrorResponse(response, "Please login to apply coupon", HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
+        int userId = user.getUserId();
         String couponCode = request.getParameter("couponCode");
         if (couponCode == null || couponCode.trim().isEmpty()) {
             sendErrorResponse(response, "Coupon code is required", HttpServletResponse.SC_BAD_REQUEST);
@@ -505,29 +700,24 @@ public class CheckoutControllerV2 extends HttpServlet {
         }
 
         try {
-            // Placeholder implementation - checkout service method not available
-        Map<String, Object> checkout = new HashMap<>();
-        checkout.put("checkoutSessionId", checkoutSessionId);
-            if (checkout == null) {
-                sendErrorResponse(response, "Checkout session not found", HttpServletResponse.SC_BAD_REQUEST);
+            boolean applied = checkoutService.applyCouponToCheckout(userId, couponCode);
+            if (!applied) {
+                sendErrorResponse(response, "Invalid or expired coupon", HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
 
-            // Placeholder implementation - checkout service method not available
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", false);
-            result.put("message", "Apply coupon not implemented");
-            
+            // Recalculate totals with coupon
+            Map<String, Double> totals = checkoutService.calculateCheckoutTotals(userId, couponCode);
+
             Map<String, Object> data = new HashMap<>();
-            data.put("success", result.get("success"));
-            data.put("message", result.get("message"));
-            if (result.containsKey("orderSummary")) {
-                data.put("orderSummary", result.get("orderSummary"));
-            }
-            
+            data.put("success", true);
+            data.put("couponCode", couponCode);
+            data.put("totals", totals);
+            data.put("message", "Coupon applied successfully");
+
             sendJsonResponse(response, data);
         } catch (Exception e) {
-            logger.error("Error applying coupon: {}", e.getMessage(), e);
+            logger.error("Error applying coupon for user {}: {}", userId, e.getMessage(), e);
             sendErrorResponse(response, "Failed to apply coupon", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
@@ -535,36 +725,27 @@ public class CheckoutControllerV2 extends HttpServlet {
     private void removeCoupon(HttpServletRequest request, HttpServletResponse response, User user) 
             throws IOException {
         
-        String checkoutSessionId = (String) request.getSession().getAttribute("checkoutSessionId");
-        if (checkoutSessionId == null) {
-            sendErrorResponse(response, "Checkout session expired", HttpServletResponse.SC_BAD_REQUEST);
+        if (user == null) {
+            sendErrorResponse(response, "Please login to remove coupon", HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
-        try {
-            // Placeholder implementation - checkout service method not available
-        Map<String, Object> checkout = new HashMap<>();
-        checkout.put("checkoutSessionId", checkoutSessionId);
-            if (checkout == null) {
-                sendErrorResponse(response, "Checkout session not found", HttpServletResponse.SC_BAD_REQUEST);
-                return;
-            }
+        int userId = user.getUserId();
 
-            // Placeholder implementation - checkout service method not available
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", false);
-            result.put("message", "Remove coupon not implemented");
+        try {
+            checkoutService.removeCouponFromCheckout(userId);
             
+            // Recalculate totals without coupon
+            Map<String, Double> totals = checkoutService.calculateCheckoutTotals(userId, null);
+
             Map<String, Object> data = new HashMap<>();
-            data.put("success", result.get("success"));
-            data.put("message", result.get("message"));
-            if (result.containsKey("orderSummary")) {
-                data.put("orderSummary", result.get("orderSummary"));
-            }
-            
+            data.put("success", true);
+            data.put("totals", totals);
+            data.put("message", "Coupon removed successfully");
+
             sendJsonResponse(response, data);
         } catch (Exception e) {
-            logger.error("Error removing coupon: {}", e.getMessage(), e);
+            logger.error("Error removing coupon for user {}: {}", userId, e.getMessage(), e);
             sendErrorResponse(response, "Failed to remove coupon", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
@@ -572,6 +753,12 @@ public class CheckoutControllerV2 extends HttpServlet {
     private void processPayment(HttpServletRequest request, HttpServletResponse response, User user) 
             throws IOException {
         
+        if (user == null) {
+            sendErrorResponse(response, "Please login to process payment", HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+
+        int userId = user.getUserId();
         String checkoutSessionId = (String) request.getSession().getAttribute("checkoutSessionId");
         if (checkoutSessionId == null) {
             sendErrorResponse(response, "Checkout session expired", HttpServletResponse.SC_BAD_REQUEST);
@@ -580,29 +767,54 @@ public class CheckoutControllerV2 extends HttpServlet {
 
         try {
             PaymentDTO payment = objectMapper.readValue(request.getReader(), PaymentDTO.class);
-            // PaymentDTO does not have setCheckoutSessionId method - commented out
-            // payment.setCheckoutSessionId(checkoutSessionId);
             
-            // Process payment with idempotency protection
-            String idempotencyKey = request.getHeader("X-Idempotency-Key");
-            // Placeholder implementation - checkout service method not available
-            Map<String, Object> paymentResult = new HashMap<>();
-            paymentResult.put("success", false);
-            paymentResult.put("message", "Process payment not implemented");
-            
+            // Validate payment method
+            String paymentMethod = payment.getPaymentMethod();
+            if (paymentMethod == null || paymentMethod.trim().isEmpty()) {
+                sendErrorResponse(response, "Payment method is required", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Get order ID if provided (for payment processing)
+            Integer orderId = payment.getOrderId();
+            if (orderId == null || orderId <= 0) {
+                sendErrorResponse(response, "Order ID is required for payment", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Verify order belongs to user
+            com.fashionstore.model.Order order = orderService.getOrderById(orderId, userId);
+            if (order == null) {
+                sendErrorResponse(response, "Order not found or unauthorized", HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
+            // Prepare payment data based on payment method
+            Map<String, Object> paymentData = new HashMap<>();
+            paymentData.put("orderId", orderId);
+            paymentData.put("paymentMethod", paymentMethod);
+            paymentData.put("amount", order.getTotalAmount());
+            paymentData.put("currency", "INR");
+
+            // Add payment method specific data
+            if ("STRIPE".equalsIgnoreCase(paymentMethod)) {
+                String stripePublishableKey = System.getenv("STRIPE_PUBLISHABLE_KEY");
+                paymentData.put("stripePublishableKey", stripePublishableKey);
+            } else if ("RAZORPAY".equalsIgnoreCase(paymentMethod)) {
+                String razorpayKeyId = System.getenv("RAZORPAY_KEY_ID");
+                paymentData.put("razorpayKeyId", razorpayKeyId);
+            } else if ("COD".equalsIgnoreCase(paymentMethod)) {
+                paymentData.put("codMessage", "Cash on Delivery selected");
+            }
+
             Map<String, Object> data = new HashMap<>();
-            data.put("success", paymentResult.get("success"));
-            data.put("message", paymentResult.get("message"));
-            if (paymentResult.containsKey("payment")) {
-                data.put("payment", paymentResult.get("payment"));
-            }
-            if (paymentResult.containsKey("order")) {
-                data.put("order", paymentResult.get("order"));
-            }
-            
+            data.put("success", true);
+            data.put("paymentData", paymentData);
+            data.put("message", "Payment data prepared successfully");
+
             sendJsonResponse(response, data);
         } catch (Exception e) {
-            logger.error("Error processing payment: {}", e.getMessage(), e);
+            logger.error("Error processing payment for user {}: {}", userId, e.getMessage(), e);
             sendErrorResponse(response, "Failed to process payment", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
