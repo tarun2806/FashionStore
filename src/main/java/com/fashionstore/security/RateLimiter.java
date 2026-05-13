@@ -17,15 +17,18 @@ public class RateLimiter {
     private static final long CLEANUP_INTERVAL = 60000; // 1 minute
     private static volatile long lastCleanup = System.currentTimeMillis();
     
+    // QA Test Mode - enabled via environment variable
+    private static final boolean QA_MODE = Boolean.parseBoolean(System.getenv().getOrDefault("QA_MODE", "false"));
+    
     // Rate limits per endpoint
-    private static final int LOGIN_ATTEMPTS_PER_MINUTE = 5;
-    private static final int REGISTRATION_ATTEMPTS_PER_MINUTE = 3;
-    private static final int GENERAL_REQUESTS_PER_MINUTE = 100;
-    private static final int PASSWORD_RESET_ATTEMPTS_PER_MINUTE = 3;
+    private static final int LOGIN_ATTEMPTS_PER_MINUTE = QA_MODE ? 1000 : 5;
+    private static final int REGISTRATION_ATTEMPTS_PER_MINUTE = QA_MODE ? 1000 : 3;
+    private static final int GENERAL_REQUESTS_PER_MINUTE = QA_MODE ? 10000 : 100;
+    private static final int PASSWORD_RESET_ATTEMPTS_PER_MINUTE = QA_MODE ? 1000 : 3;
     
     // Account lockout settings
-    private static final int MAX_FAILED_ATTEMPTS = 5;
-    private static final long LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
+    private static final int MAX_FAILED_ATTEMPTS = QA_MODE ? 1000 : 5;
+    private static final long LOCKOUT_DURATION = QA_MODE ? 0 : 15 * 60 * 1000; // Disabled in QA mode
     
     private static class RateLimitEntry {
         final AtomicInteger count;

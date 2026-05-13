@@ -51,7 +51,10 @@ public class CheckoutControllerV2 extends HttpServlet {
         User user = (session != null) ? (User) session.getAttribute("user") : null;
 
         try {
-            if ("/init".equals(pathInfo)) {
+            if (pathInfo == null || "/".equals(pathInfo)) {
+                // Display checkout page
+                displayCheckoutPage(request, response, user);
+            } else if ("/init".equals(pathInfo)) {
                 initCheckout(request, response, user);
             } else if ("/validate".equals(pathInfo)) {
                 validateCheckout(request, response, user);
@@ -110,6 +113,25 @@ public class CheckoutControllerV2 extends HttpServlet {
             logger.error("Error in CheckoutController doPost: {}", e.getMessage(), e);
             sendErrorResponse(response, "Internal server error", HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private void displayCheckoutPage(HttpServletRequest request, HttpServletResponse response, User user)
+            throws ServletException, IOException {
+        
+        if (user == null) {
+            response.sendRedirect(request.getContextPath() + "/login");
+            return;
+        }
+
+        // Ensure CSRF token is available
+        CSRFProtection.addTokenToRequest(request);
+
+        // Pass Stripe publishable key to JSP
+        String stripePublishableKey = System.getenv("STRIPE_PUBLISHABLE_KEY");
+        request.setAttribute("stripePublishableKey", stripePublishableKey);
+
+        request.getRequestDispatcher("/WEB-INF/views/checkout.jsp")
+               .forward(request, response);
     }
 
     private void initCheckout(HttpServletRequest request, HttpServletResponse response, User user) 
